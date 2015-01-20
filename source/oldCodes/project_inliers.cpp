@@ -30,10 +30,12 @@
 #include "slam3D.h"
 //#include "KeyPointManager.h"
 #include "PlaneManager.h"
+#include <time.h>
 
 #include "glwindows.h"
 #include "NeHeGL.h"
 #include "sdf.h"
+#include "icp.h"
 
 using namespace std;
 
@@ -62,7 +64,7 @@ vector<vector<int>> foundPlanes;  //存储每帧提取出来的平面对应的ID
 vector<cv::Mat> descriptors;
 vector<PointCloud::Ptr> pointClouds;
 vector<PointCloud::Ptr> transpointClouds;
-
+vector<pcl::PointCloud<pcl::Normal>::Ptr> transpointNormals;
 vector<Eigen::Matrix4f> trans;
 
 #define isnan(x) ((x) != (x)) 
@@ -977,9 +979,21 @@ void do_SLAM(string sFilename,int argc,char** argv){
 	XtoZ = atan(fov.fHFOV/2)*2;
 	YtoZ = atan(fov.fVFOV/2)*2;
 	Eigen::Matrix4f zero;  
+	Eigen::Matrix4f lzero; 
+	Eigen::Matrix4f dzero; 
 	zero << 1, 0, 0, 0,  
 			0, 1, 0, 0,  
 			0, 0, 1, 0,  
+			0, 0, 0, 1;
+
+	lzero<< 0, 1, 0, 0,  
+			1, 0, 0, 0,  
+			0, 0, 1, 0,  
+			0, 0, 0, 1;
+
+	dzero<< 0, 0, -1, 0,  
+			0, 1, 0, 0,  
+			-1, 0, 0, 0,  
 			0, 0, 0, 1;
 
 	//Sdf::sdf = new Sdf(zero, 1, 1.2, 4.0, -2.0, -3.5, -1.0, 0.01, 0.1, 0.001); //xy
@@ -989,15 +1003,18 @@ void do_SLAM(string sFilename,int argc,char** argv){
 	//Sdf::tsdf = new TsdfNode();
 	//Sdf::tsdf->Initial(-3.0,-2.0,0.0,1.2,1.0,4.0,0.05);
 	//Sdf::tsdf->split();
+	clock_t start, finish;
+
+	float dthresh = 0.5;
 
 	int k = 0,d = 0;
-	while( (key!=27) && !(result = context.WaitAndUpdateAll( ))  && d < 310)
+	while( (key!=27) && !(result = context.WaitAndUpdateAll( ))  && d < 440)
 	{    
 		//get meta data  
 		depthGenerator.GetMetaData(depthMD);   
 		imageGenerator.GetMetaData(imageMD);
 		d++;
-		//if( d < 50) continue;
+		//if( d < 150) continue;
 		if( d % 10 != 1) continue;
  
 		//OpenCV output  
@@ -1026,12 +1043,55 @@ void do_SLAM(string sFilename,int argc,char** argv){
 		pointClouds.push_back(cloud);
 
 		foundPlanes.push_back(*(new vector<int>()));
+
+
 		//front-end 用RANSAC方法做第一次粗匹配
 		if(k == 0){
 			transpointClouds.push_back(cloud);
 			Eigen::Matrix4f tran = Eigen::Matrix4f::Identity();
 			trans.push_back(tran);
 		}
+		else{
+			XnFieldOfView fov;
+			depthGenerator.GetFieldOfView(fov);
+			XnMapOutputMode outputMode;
+			depthGenerator.GetMapOutputMode(outputMode);
+
+			double fXToZ = tan(fov.fHFOV/2)*2;	
+			double fYToZ = tan(fov.fVFOV/2)*2;
+
+			XnUInt32 nHalfXres = outputMode.nXRes / 2;	
+			XnUInt32 nHalfYres = outputMode.nYRes / 2;
+
+			XnDouble fCoeffX = outputMode.nXRes / fXToZ;
+			XnDouble fCoeffY = outputMode.nYRes / fYToZ;
+
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_source(new pcl::PointCloud<pcl::PointXYZRGB>);
+	        pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_target(new pcl::PointCloud<pcl::PointXYZRGB>);
+			double variance = 0;
+			pcl::CorrespondencesPtr ransac_correspondences (new pcl::Correspondences);
+			Eigen::Matrix4f init;
+			do_match(k,k-1,ransac_correspondences,init,variance,false);
+
+			//Eigen::Matrix4f init2 = trans[k - 1];
+			Eigen::Matrix4f tran = cpuICP(transpointNormals[k - 1], transpointClouds[k - 1], cloud, trans[k - 1].inverse(), init, nHalfXres, nHalfYres, fCoeffX, fCoeffY,dthresh);
+
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr transCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+			pcl::transformPointCloud(*(pointClouds.at(k)), *transCloud, tran);
+			transpointClouds.push_back(transCloud);
+			trans.push_back(tran);
+		}
+
+		pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+		pcl::IntegralImageNormalEstimation<PointT, pcl::Normal> ne;
+	    ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
+	    ne.setMaxDepthChangeFactor(0.03f);
+	    ne.setNormalSmoothingSize(20.0f);
+	    ne.setInputCloud(transpointClouds[k]);
+	    ne.compute(*normals);
+		transpointNormals.push_back(normals);
+
+		/*
 		if(k > 0){
 			pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_source(new pcl::PointCloud<pcl::PointXYZRGB>);
 	        pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_target(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -1042,11 +1102,11 @@ void do_SLAM(string sFilename,int argc,char** argv){
 			for(int i = 0, j = k-2;i < 3 && j >= 0;i++,j--){
 				CandidateFrame.push_back(j);
 			}
-			for(int i = (k/10);i >= 0;i--){
-				if(k - i*10 > 3){
-					CandidateFrame.push_back(i*10);
-				}
-			}
+			//for(int i = (k/10);i >= 0;i--){
+			//	if(k - i*10 > 3){
+			//		CandidateFrame.push_back(i*10);
+			//	}
+			//}
 			int count = 0;
 			for(int i = 0;i < CandidateFrame.size();i++){
 				pcl::PointCloud<pcl::PointXYZRGB>::Ptr add_source(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -1069,7 +1129,7 @@ void do_SLAM(string sFilename,int argc,char** argv){
 			transpointClouds.push_back(transCloud);
 			trans.push_back(tran);
 		}
-		
+		*/
 		k++;
 
 		key=cvWaitKey(10); 
@@ -1105,10 +1165,10 @@ void do_SLAM(string sFilename,int argc,char** argv){
 		//boost::this_thread::sleep (boost::posix_time::microseconds (100000));
 	}
 
-	GL_Mesh::gl_vertexes = new std::vector<GLVertex>();
-	GL_Mesh::gl_meshes = new std::map<std::tuple<int,int,int>,GLMesh>();
-	GL_Mesh::gl_edges = new std::map<std::pair<int,int>,int>();
-	GL_Mesh::gl_trans = new std::vector<Eigen::Matrix4f>();
+	//GL_Mesh::gl_vertexes = new std::vector<GLVertex>();
+	//GL_Mesh::gl_meshes = new std::map<std::tuple<int,int,int>,GLMesh>();
+	//GL_Mesh::gl_edges = new std::map<std::pair<int,int>,int>();
+	//GL_Mesh::gl_trans = new std::vector<Eigen::Matrix4f>();
 	int lp =0;
 	Plane3D current_coff;
 	for(vector<PointCloud::Ptr>::iterator it = transpointClouds.begin();it != transpointClouds.end();it++,lp++){
@@ -1175,16 +1235,18 @@ void do_SLAM(string sFilename,int argc,char** argv){
 			}
 		
 		
-			cout<<maxX-minX<<","<<maxY-minY<<","<<maxZ-minZ<<endl;
-			Sdf::sdf = new Sdf(local, maxX, maxY, maxZ, minX, minY, minZ, 0.01, 0.1, 0.001);
-			//Sdf::sdf = new Sdf(local, 1.2, 1, 4.0, -3.5, -2.0, -1.0, 0.01, 0.1, 0.001);
+			//cout<<maxX-minX<<","<<maxY-minY<<","<<maxZ-minZ<<endl;
+			double dev = 0.01;
+			//Sdf::sdf = new Sdf(zero, 1.2, 1, 4.0, -3.5, -2.5, -3.0, 0.01, 0.1, 0.001);
+			Sdf::sdf = new Sdf(local, maxX, maxY, maxZ, minX, minY, minZ, dev, dev*10, dev/10);
+			//Sdf::sdf = new Sdf(local, 1.2, 1, 1.0, -1.5, -1.0, 0.0, dev, dev*10, dev/10);
 		}else{
 			double dis = (coff.a*current_coff.a)+(coff.b*current_coff.b)+(coff.c*current_coff.c);
-			cout<<"cur_coff"<<current_coff.a<<","<<dis<<endl;
+			//cout<<"cur_coff"<<current_coff.a<<","<<dis<<endl;
 			if(dis < 0.7) current_coff = coff;
-
 			
-			current_coff = coff;
+			
+	    	current_coff = coff;
 			//dbplane_segment(normals,*it,0.02);
 			double before[4];
 			double after[4];
@@ -1199,8 +1261,8 @@ void do_SLAM(string sFilename,int argc,char** argv){
 			after[2] = 1;
 			after[3] = 0;
 
-			Eigen::Matrix4f local = CalTransport(before,after);
-			//Eigen::Matrix4f local = zero;
+			//Eigen::Matrix4f local = CalTransport(before,after);
+			Eigen::Matrix4f local = zero;
 			Eigen::Matrix4f local_c = local.inverse();
 
 			bool flag = false;
@@ -1235,10 +1297,17 @@ void do_SLAM(string sFilename,int argc,char** argv){
 			}
 		
 		
-			cout<<maxX-minX<<","<<maxY-minY<<","<<maxZ-minZ<<endl;
+			//cout<<maxX-minX<<","<<maxY-minY<<","<<maxZ-minZ<<endl;
+			double dx = (maxX - minX);
+			double dy = (maxY - minY);
+			double dz = (maxZ - minZ);
+			cout<<"size:"<<dx<<","<<dy<<","<<dz<<endl;
 			//Sdf::sdf->changeLocal(local, 1.2, 1, 4.0, -3.5, -2.0, -1.0);
+			//start = clock(); 
 			Sdf::sdf->changeLocal(local, maxX, maxY, maxZ, minX, minY, minZ);
-			
+			//finish = clock(); 
+			//double duration = (double)(finish - start) / CLOCKS_PER_SEC; 
+			//cout<<duration<<" ";
 		}
 
 		DepthCalculator dg;
@@ -1250,15 +1319,24 @@ void do_SLAM(string sFilename,int argc,char** argv){
 		//Sdf::tsdf->Traversal(&dg);
 		//GL_Mesh::gl_meshes = NULL;
 		//GLWindows();
-
+		start = clock();
 		Sdf::sdf->Traversal2(&dg);
-
-
-		if(lp >= 0)
-		{
+		finish = clock(); 
+		double duration = (double)(finish - start) / CLOCKS_PER_SEC; 
+		cout<<duration<<" ";
+		//if(lp >= 0)
+		//{
 			GL_Mesh::gl_trans->push_back(trans[lp]);
-		    Sdf::sdf->castNextMeshes(GL_Mesh::gl_trans->size()-1);
-		}
+			start = clock(); 
+			Sdf::sdf->castNextMeshes(GL_Mesh::gl_trans->size()-1);
+			finish = clock(); 
+			duration = (double)(finish - start) / CLOCKS_PER_SEC; 
+			cout<<duration<<endl;
+			//GL_Mesh::gl_trans->push_back(dzero * trans[lp]);
+		    //Sdf::sdf->castNextMeshes(GL_Mesh::gl_trans->size()-1);
+			//GL_Mesh::gl_trans->push_back(lzero * trans[lp]);
+		    //Sdf::sdf->castNextMeshes(GL_Mesh::gl_trans->size()-1);
+		//}
 
 
 		
@@ -1285,6 +1363,8 @@ void do_SLAM(string sFilename,int argc,char** argv){
 	//GL_Mesh::gl_trans->push_back(trans[0]);
 	//GL_Mesh::gl_trans->push_back(trans[5]);
 	//GL_Mesh::gl_trans->push_back(trans[10]);
+	//GL_Mesh::gl_trans->push_back(trans[15]);
+	//GL_Mesh::gl_trans->push_back(trans[20]);
 	
 	//for(int i = 0;i < GL_Mesh::gl_trans->size();i++)
 	//{
@@ -1301,7 +1381,7 @@ void do_SLAM(string sFilename,int argc,char** argv){
 	//Sdf::sdf->castMeshes(trans[5]);
 	//Sdf::sdf->castMeshes(trans[10]);
 	Sdf::sdf->outputObj();
-	GLWindows();
+	//GLWindows();
 
 	Sdf::sdf->freeData();
 
@@ -1495,9 +1575,12 @@ void do_SLAM(string sFilename,int argc,char** argv){
 }
 
 int
- main (int argc, char** argv)
+ main2 (int argc, char** argv)
 {
+  //do_SLAM("F:/1.ONI",argc,argv);	
   do_SLAM("D:/PCL/record.ONI",argc,argv);
+  //do_SLAM("D:/PCL/DATA/16.ONI",argc,argv);
+  return 0;
 }
  
 

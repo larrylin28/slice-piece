@@ -369,7 +369,7 @@ BOOL RegisterWindowClass (Application* application)						// Register A Window Cl
 }
 
 // Program Entry (WinMain)
-int GLWindows()
+int GLWindows(Rgbd::GLMesh* mesh)
 {
 	Application			application;									// Application Structure
 	GL_Window			window;											// Window Structure
@@ -448,7 +448,7 @@ int GLWindows()
 							tickCount = GetTickCount ();				// Get The Tick Count
 							Update (tickCount - window.lastTickCount);	// Update The Counter
 							window.lastTickCount = tickCount;			// Set Last Count To Current Count
-							Draw ();									// Draw Our Scene
+							Draw (mesh);									// Draw Our Scene
 
 							SwapBuffers (window.hDC);					// Swap Buffers (Double Buffering)
 						}

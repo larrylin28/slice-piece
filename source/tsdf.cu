@@ -1,10 +1,14 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include "kernel.cuh"
+#include "tsdf.cuh"
 
 #include <stdio.h>
 
 #define isnan(x) ((x) != (x)) 
+
+//dangerous code, be careful
+#define GO_TO_ERROR(status, msg) if (status != cudaSuccess){fprintf(stderr, msg); goto Error;}
+
 
 float _minX;
 float _minY;
@@ -379,6 +383,7 @@ __global__ void fusion(float* ptsx, float* ptsy, float* ptsz, float* norx, float
 	}
 }
 
+
 int changeSdf(float minx, float miny, float minz, int xlen,int ylen, int zlen, float* local,float* olocalc)
 {
 
@@ -396,58 +401,31 @@ int changeSdf(float minx, float miny, float minz, int xlen,int ylen, int zlen, f
 	cudaError_t cudaStatus = cudaSuccess;
 
     cudaStatus = cudaMalloc((void**)&n_dists, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+	GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&n_weights, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&n_n_x, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&n_n_y, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&n_n_z, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&n_local, 4*4 * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&o_localc, 4*4 * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMemcpy(n_local, local, 4*4 * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(o_localc, olocalc, 4*4 * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	dim3 dimBlock(ylen,zlen);
 	changeSdfData<<<dimBlock, xlen>>>(n_local, n_dists, n_weights, n_n_x, n_n_y, n_n_z, o_localc, _dists, _weights, _n_x, _n_y, _n_z, minx, miny, minz, xlen, ylen, zlen, _minX, _minY, _minZ, _Xlen, _Ylen, _Zlen, _devide, _thre);
@@ -513,40 +491,22 @@ int getAllDepths(float ix, float iy, float devide, int xl,int yl,float* mc, floa
 	cudaError_t cudaStatus = cudaSuccess;
 
 	cudaStatus = cudaMalloc((void**)&dev_pdists, xl*yl * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_pnx, xl*yl * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_pny, xl*yl * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_pnz, xl*yl * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_mc, 4*4 * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMemcpy(dev_mc, mc, 4*4 * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	getDepth<<<xl, yl>>>(ix,iy,devide, _minX,_minY,_minZ, _Xlen,_Ylen,_Zlen, xl, dev_mc, dev_pdists, dev_pnx, dev_pny, dev_pnz,_dists, _weights, _n_x, _n_y, _n_z);
 
@@ -565,28 +525,16 @@ int getAllDepths(float ix, float iy, float devide, int xl,int yl,float* mc, floa
     }
 
 	cudaStatus = cudaMemcpy(p_dists, dev_pdists, xl*yl * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(p_nx, dev_pnx, xl*yl * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(p_ny, dev_pny, xl*yl * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(p_nz, dev_pnz, xl*yl * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	Error:
     cudaFree(dev_pdists);
@@ -617,34 +565,19 @@ int getSdf(float* dists ,float* weights,float* n_x,float* n_y,float* n_z,int siz
 	
 	cudaError_t cudaStatus = cudaSuccess;
 	cudaStatus = cudaMemcpy(dists, _dists, size * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(weights, _weights, size * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(n_x, _n_x, size * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(n_y, _n_y, size * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(n_z, _n_z, size * sizeof(float), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	Error:
     cudaFree(_dists);
@@ -671,88 +604,46 @@ int updateSdf(float* ptsx, float* ptsy, float* ptsz, float* norx, float* nory, f
 	cudaError_t cudaStatus = cudaSuccess;
 
 	cudaStatus = cudaMalloc((void**)&dev_px, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_py, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_pz, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_nx, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_ny, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_nz, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&dev_mc, 4*4 * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMemcpy(dev_px, ptsx, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(dev_py, ptsy, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(dev_pz, ptsz, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(dev_nx, norx, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(dev_ny, nory, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(dev_nz, norz, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(dev_mc, mc, 4*4 * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	dim3 dimBlock(_Ylen,_Zlen);
     fusion<<<dimBlock, _Xlen>>>(dev_px, dev_py, dev_pz, dev_nx, dev_ny, dev_nz, dev_mc, _dists, _weights, _n_x, _n_y, _n_z, _local ,xres,yres,coeffx,coeffy,_minX,_minY,_minZ,_Xlen,_Ylen,_Zlen,_devide, _epsi, _thre, width);
@@ -811,76 +702,40 @@ int initialSdf(float minx, float miny, float minz, int xlen,int ylen, int zlen, 
     }
 
     cudaStatus = cudaMalloc((void**)&_dists, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&_weights, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&_n_x, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&_n_y, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&_n_z, size * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMalloc((void**)&_local, 4*4 * sizeof(float));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
 
 	cudaStatus = cudaMemcpy(_dists, dists, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(_weights, weights, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(_n_x, nx, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(_n_y, ny, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(_n_z, nz, size * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	cudaStatus = cudaMemcpy(_local, local, 4*4 * sizeof(float), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    GO_TO_ERROR(cudaStatus,  "cudaMemcpy failed!");
 
 	return cudaStatus;
 

@@ -14,7 +14,7 @@
 #include "math.h"												    // NEW: Needed For Sqrtf
 #include "ArcBall.h"												// NEW: ArcBall Header
 #include "glwindows.h"
-#include "sdf.h"
+#include "TriangleMesh.h"
 
 #pragma comment( lib, "opengl32.lib" )								// Search For OpenGL32.lib While Linking
 #pragma comment( lib, "glu32.lib" )									// Search For GLu32.lib While Linking
@@ -175,7 +175,7 @@ void Torus(float MinorRadius, float MajorRadius)					// Draw A Torus With Normal
 	glEnd();														// Done Torus
 }
 
-void Draw (void)
+void Draw (Rgbd::GLMesh* mesh)
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);				// Clear Screen And Depth Buffer
 	glLoadIdentity();												// Reset The Current Modelview Matrix
@@ -186,15 +186,15 @@ void Draw (void)
     glPushMatrix();													// NEW: Prepare Dynamic Transform
     glMultMatrixf(Transform.M);										// NEW: Apply Dynamic Transform
 	
-	if(GL_Mesh::gl_meshes != NULL){
+	if(mesh->gl_meshes.size() > 0){
 		glBegin(GL_TRIANGLES);
-		for(std::map<std::tuple<int,int,int>,GLMesh>::iterator it = GL_Mesh::gl_meshes->begin();it != GL_Mesh::gl_meshes->end();it++){
+		for(std::map<std::tuple<int,int,int>,Rgbd::GLTriangle>::iterator it = mesh->gl_meshes.begin();it != mesh->gl_meshes.end();it++){
 			//glBegin(GL_LINE_LOOP);
-			GLMesh m = it->second;
-			GLVertex v[3];
-			v[0] = GL_Mesh::gl_vertexes->at(m.vertexes[0]);
-			v[1] = GL_Mesh::gl_vertexes->at(m.vertexes[1]);
-			v[2] = GL_Mesh::gl_vertexes->at(m.vertexes[2]);
+			Rgbd::GLTriangle m = it->second;
+			Rgbd::GLVertex v[3];
+			v[0] = mesh->gl_vertexes.at(m.vertexes[0]);
+			v[1] = mesh->gl_vertexes.at(m.vertexes[1]);
+			v[2] = mesh->gl_vertexes.at(m.vertexes[2]);
 			glNormal3f(v[0].v[3], v[0].v[4], v[0].v[5]);
 			glVertex3f(v[0].v[0], v[0].v[1], v[0].v[2]);
 			glNormal3f(v[1].v[3], v[1].v[4], v[1].v[5]);
@@ -204,19 +204,21 @@ void Draw (void)
 			//glEnd();
 		}
 		glEnd();
-	}else if(Sdf::sdf != NULL){
-		glBegin(GL_POINTS);
-		glColor3f(1.0,1.0,1.0); //设置点颜色
-		Sdf::sdf->TraversalDraw();
-		glEnd();
-		
-	}else if(Sdf::tsdf != NULL){
-		glBegin(GL_POINTS);
-		glColor3f(1.0,1.0,1.0); //设置点颜色
-		Sdf::tsdf->TraversalDraw();
-		glEnd();
-		
 	}
+	//
+	//else if(Sdf::sdf != NULL){
+	//	glBegin(GL_POINTS);
+	//	glColor3f(1.0,1.0,1.0); //设置点颜色
+	//	Sdf::sdf->TraversalDraw();
+	//	glEnd();
+	//	
+	//}else if(Sdf::tsdf != NULL){
+	//	glBegin(GL_POINTS);
+	//	glColor3f(1.0,1.0,1.0); //设置点颜色
+	//	Sdf::tsdf->TraversalDraw();
+	//	glEnd();
+	//	
+	//}
 	
 
 	
@@ -274,72 +276,3 @@ int DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 	return TRUE;										// Keep Going
 }
 */
-void GLVertex::DoUpdate()
-{
-	if(upcount >0){
-		/*
-		dist += up/upcount;
-		Eigen::Matrix4f tr = GL_Mesh::gl_trans->at(tran);
-		Eigen::Vector4f vv;
-		Eigen::Vector4f t;
-		vv[0] = 0;
-		vv[1] = 0;
-		vv[2] = up/upcount;
-		vv[3] = 1;
-		t = tr*vv;
-		v[0] += t[0];
-		v[1] += t[1];
-		v[2] += t[2];
-		up = 0;
-		upcount = 0;
-		*/
-		Eigen::Matrix4f tr = GL_Mesh::gl_trans->at(tran);
-		upxyz[0] /= upcount;
-		upxyz[1] /= upcount;
-		upxyz[2] /= upcount;
-		double ndis = sqrt(tr(0,2)*tr(0,2) + tr(1,2)*tr(1,2) + tr(2,2)*tr(2,2));
-		double mcos = (tr(0,2)*upxyz[0]+tr(1,2)*upxyz[1]+tr(2,2)*upxyz[2])/ndis/ndis;
-		v[0] += mcos*tr(0,2);
-		v[1] += mcos*tr(1,2);
-		v[2] += mcos*tr(2,2);
-		upxyz[0] = 0;
-		upxyz[1] = 0;
-		upxyz[2] = 0;
-		upcount = 0;
-	}
-}
-
-void GLVertex::LaplacianUpdate(double v1[6])
-{
-	//double weight = 1;
-	double dis = sqrt((v1[0]-v[0])*(v1[0]-v[0]) + (v1[1]-v[1])*(v1[1]-v[1]) + (v1[2]-v[2])*(v1[2]-v[2]));
-	double weight = 0;
-	if(dis < 0.1){
-	 weight = pow(2.7182818284590452353602874713526624977572,-500*dis*dis);
-	}
-	/*
-	Eigen::Matrix4f mc = GL_Mesh::gl_trans->at(tran).inverse();
-	Eigen::Vector4f vv;
-	Eigen::Vector4f t;
-	vv[0] = v1[0];
-	vv[1] = v1[1];
-	vv[2] = v1[2];
-	vv[3] = 1;
-	t = mc*vv;
-	up += (t[2]-dist)*weight;
-	*/
-	upxyz[0] += weight*(v1[0]-v[0]);
-	upxyz[1] += weight*(v1[1]-v[1]);
-	upxyz[2] += weight*(v1[2]-v[2]);
-	upcount += weight;
-	
-
-}
-
-std::map<std::tuple<int,int,int>,GLMesh>* GL_Mesh::gl_meshes = NULL;
-std::vector<GLVertex>* GL_Mesh::gl_vertexes = NULL;
-std::map<std::pair<int,int>,int>* GL_Mesh::gl_edges = NULL;
-std::vector<Eigen::Matrix4f>* GL_Mesh::gl_trans = NULL;
-std::map<std::tuple<int,int,int>,GLMergeVertex>* GL_Mesh::gl_vertex_map = NULL;
-//MyMesh GL_Mesh::o_meshes = *(new MyMesh());
-

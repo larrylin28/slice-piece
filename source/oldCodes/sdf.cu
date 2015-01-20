@@ -221,6 +221,7 @@ Sdf::Sdf():oldp(NULL)
 				0, 0, 1, 0,  
 				0, 0, 0, 1;
 
+	mesh = new GL_Mesh();
 	maxX=1.2;
     maxY=1;
     maxZ=4.0;
@@ -762,7 +763,7 @@ int** Sdf::castPieceMeshes(int tranID,int** pre,int lastID)
 		ixid[i] = xl;
 		axid[i] = -1;
 	}
-	
+	/*
 	if(GL_Mesh::gl_meshes->size() > 0)
 	{
 		std::map<std::tuple<int,int,int>,GLMesh>::iterator it = GL_Mesh::gl_meshes->begin();
@@ -775,7 +776,7 @@ int** Sdf::castPieceMeshes(int tranID,int** pre,int lastID)
 			coverPointinTriangle(v,planePoints,xl,yl,mc,ix,iy);
 		}
 	}
-	
+	*/
 	/*
 	if(pre != NULL)
 	{

@@ -30,6 +30,12 @@
 
 #include <windows.h>								// Header File For Windows
 
+
+namespace Rgbd
+{
+	class GLMesh;
+}
+
 typedef struct {									// Structure For Keyboard Stuff
 	BOOL keyDown [256];								// Holds TRUE / FALSE For Each Key
 } Keys;												// Keys
@@ -69,8 +75,8 @@ void Deinitialize (void);							// Performs All Your DeInitialization
 
 void Update (DWORD milliseconds);					// Perform Motion Updates
 
-void Draw (void);									// Perform All Your Scene Drawing
+void Draw (Rgbd::GLMesh* mesh);									// Perform All Your Scene Drawing
 
-int GLWindows();
+int GLWindows(Rgbd::GLMesh* mesh);
 
 #endif												// GL_FRAMEWORK__INCLUDED

@@ -90,6 +90,10 @@ public:
   //SDF的旋转矩阵
   Eigen::Matrix4f local_tran;
 
+  //生成的网格
+  typedef boost::shared_ptr<GL_Mesh> MeshPtr;
+  MeshPtr mesh;
+
   //空间范围
   double maxX;
   double maxY;
