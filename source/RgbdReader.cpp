@@ -407,50 +407,5 @@ namespace Rgbd
 		
 	}
 
-	void RgbdReader::showSegmentation(int frameId, Segmentation* seg)
-	{
-		vector<int> tags(datas->transpointClouds[frameId]->size(), -1);
-		int count = seg->nextSegment(datas->transpointClouds[frameId], datas->transpointNormals[frameId], tags);
-
-		boost::shared_ptr<pcl::visualization::PCLVisualizer> vis1 (new pcl::visualization::PCLVisualizer ("Seg"));
-
-		vis1->initCameraParameters ();
-		vis1->setBackgroundColor (0.1, 0.1, 0.1);
-		vis1->addText("point clouds", 10, 10, "point clouds");
-
-		vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> showClouds;
-
-		for(int i = 0; i < count; i++)
-		{
-			showClouds.push_back(pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>));
-		}
-
-		for(int i = 0; i < datas->transpointClouds[frameId]->size(); i++)
-		{
-			if(tags[i] >= 0 && tags[i] < count)
-			{
-				showClouds[tags[i]]->push_back(datas->transpointClouds[frameId]->at(i));
-			}
-		}
-
-		for(int i = 0; i < count; i++)
-		{
-			//pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> single_color(showClouds[i]);
-			double r = GETCOLORR(i);
-			double g = GETCOLORG(i);
-			double b = GETCOLORB(i);
-			pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(showClouds[i], r*255, g*255, b*255);
-			stringstream ss;
-			ss<<"cloud"<<i;
-			vis1->addPointCloud<pcl::PointXYZRGB> (showClouds[i], single_color, ss.str());
-			vis1->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, ss.str());
-		}
-
-		while (!vis1->wasStopped())
-		{
-			//在此处可以添加其他处理
-			vis1->spinOnce (100);
-			//boost::this_thread::sleep (boost::posix_time::microseconds (100000));
-		}
-	}
+	
 }

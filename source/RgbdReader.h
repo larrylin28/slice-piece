@@ -75,7 +75,6 @@ namespace Rgbd
 		void Read(std::string sFilename, int startFrame, int skip, int frameCount, double dthresh);
 		void ShowPointCoud();
 		void putDataToSdf(SdfModel* sdf, int frameId);
-		void showSegmentation(int frameId, Segmentation* seg);
 		int getFrameCount();
 		Eigen::Matrix4f getTrans(int frameId);
 

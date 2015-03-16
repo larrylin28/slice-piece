@@ -14,6 +14,12 @@ namespace Rgbd
 		edge[v2][v1] += weight;
 	}
 
+	void Graph::addEdge(int v1, int v2, double weight1, double weight2)
+	{
+		edge[v1][v2] += weight1;
+		edge[v2][v1] += weight2;
+	}
+
 	void Graph::swapVertexes(int v1, int v2)
 	{
 		if(v1 == v2) return;

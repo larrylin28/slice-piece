@@ -4,6 +4,8 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 
+#define DEBUG_PLANE_SEGMENT
+
 namespace Rgbd
 {
 	typedef pcl::PointXYZRGB PointT;
@@ -33,13 +35,27 @@ namespace Rgbd
 		double Exy;
 		double Eyz;
 		double Exz;
+		int inliers;
+		double cov[3][3];
+		double lamda[3];
+		double vec[3][3];
+		Plane3D plane;
 
-		coffCal():Ex(0),Ey(0),Ez(0),Ex2(0),Ey2(0),Ez2(0),Exy(0),Eyz(0),Exz(0)
+		coffCal():Ex(0),Ey(0),Ez(0),Ex2(0),Ey2(0),Ez2(0),Exy(0),Eyz(0),Exz(0),inliers(0)
 		{
+			for(int i = 0; i < 3; i++)
+			{
+				for(int j = 0; j < 3; j++)
+				{
+					cov[i][j] = 0;
+				}
+			}
+			plane.inliers = 0;
 		}
 
 		void addPoint(PointT pp)
 		{
+
 			Ex += pp.x;
 			Ey += pp.y;
 			Ez += pp.z;
@@ -49,10 +65,78 @@ namespace Rgbd
 			Exy += pp.x*pp.y;
 			Eyz += pp.y*pp.z;
 			Exz += pp.x*pp.z;
+			inliers++;
+
+			if(inliers > 1)
+			{
+				double v[3];
+				v[0] = (pp.x - Ex / inliers);
+				v[1] = (pp.y - Ey  / inliers);
+				v[2] = (pp.z - Ez  / inliers);
+
+				for(int i = 0; i < 3; i++)
+				{
+					for(int j = 0; j < 3; j++)
+					{
+						cov[i][j] += v[i]*v[j] * inliers / (inliers - 1);
+					}
+				}
+			}
 		}
 
-		Plane3D getCoff();
+		void merge(coffCal& b)
+		{
+			double dEsp[3];
+			dEsp[0] = Ex - b.Ex;
+			dEsp[1] = Ey - b.Ey;
+			dEsp[2] = Ez - b.Ez;
+
+			for(int i = 0; i < 3; i++)
+		    {
+				for(int j = 0; j < 3; j++)
+				{
+					cov[i][j] = cov[i][j] + b.cov[i][j] + dEsp[i]*dEsp[j] * inliers * b.inliers / (inliers + b.inliers);
+				}
+			}
+
+			Ex += b.Ex;
+			Ey += b.Ey;
+			Ez += b.Ez;
+			Ex2 += b.Ex2;
+			Ey2 += b.Ey2;
+			Ez2 += b.Ez2;
+			Exy += b.Exy;
+			Eyz += b.Eyz;
+			Exz += b.Exz;
+			inliers += b.inliers;
+
+			plane.inliers = 0;
+			getCoff();
+		    calAxis();
+		 }
+
+		/*
+		void addPointForCov(PointT pp)
+		{
+			double v[3];
+			v[0] = (pp.x - Ex / inliers);
+			v[1] = (pp.y - Ey  / inliers);
+			v[2] = (pp.z - Ez  / inliers);
+			
+			for(int i = 0; i < 3; i++)
+			{
+				for(int j = 0; j < 3; j++)
+				{
+					cov[i][j] += v[i]*v[j];
+				}
+			}
+		}
+		*/
+
+		Plane3D& getCoff();
+		void calAxis();
 	};
+
 
 	double p_distance(Plane3D& a, Plane3D& b);
 	double p_distance(Plane3D& p, double a, double b, double c, double d);

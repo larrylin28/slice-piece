@@ -1,12 +1,217 @@
 #include "Plane3D.h"
 #include "Util.h"
+#include <math.h>
 #include <queue>
 #include <algorithm>
+
+#define ROTATE(a,i,j,k,l) g=a[i][j];h=a[k][l];a[i][j]=g-s*(h+g*tau);\
+	a[k][l]=h+s*(g-h*tau);
 
 using namespace std;
 
 namespace Rgbd
 {
+
+	static void jacobi(double **a, int n, double d[], double **v, int *nrot)
+	{
+	  int j,iq,ip,i;
+	  double tresh,theta,tau,t,sm,s,h,g,c,*b,*z;
+  
+	  b= new double[n+1];
+	  z= new double[n+1];
+	  for (ip=1;ip<=n;ip++) {
+		for (iq=1;iq<=n;iq++) v[ip][iq]=0.0;
+		v[ip][ip]=1.0;
+	  }
+	  for (ip=1;ip<=n;ip++) {
+		b[ip]=d[ip]=a[ip][ip];
+		z[ip]=0.0;
+	  }
+	  *nrot=0;
+	  for (i=1;i<=50;i++) {
+		sm=0.0;
+		for (ip=1;ip<=n-1;ip++) {
+		  for (iq=ip+1;iq<=n;iq++)
+			sm += fabs(a[ip][iq]);
+		}
+		if (sm == 0.0) {
+		  delete z;
+		  delete b;
+		  //free_vector(z,1,n);
+		  //free_vector(b,1,n);
+		  return;
+		}
+		if (i < 4)
+		  tresh=0.2*sm/(n*n);
+		else
+		  tresh=0.0;
+		for (ip=1;ip<=n-1;ip++) {
+		  for (iq=ip+1;iq<=n;iq++) {
+			g=100.0*fabs(a[ip][iq]);
+			if (i > 4 && (double)(fabs(d[ip])+g) == (double)fabs(d[ip])
+				&& (double)(fabs(d[iq])+g) == (double)fabs(d[iq]))
+			  a[ip][iq]=0.0;
+			else if (fabs(a[ip][iq]) > tresh) {
+			  h=d[iq]-d[ip];
+			  if ((double)(fabs(h)+g) == (double)fabs(h))
+				t=(a[ip][iq])/h;
+			  else {
+				theta=0.5*h/(a[ip][iq]);
+				t=1.0/(fabs(theta)+sqrt(1.0+theta*theta));
+				if (theta < 0.0) t = -t;
+			  }
+			  c=1.0/sqrt(1+t*t);
+			  s=t*c;
+			  tau=s/(1.0+c);
+			  h=t*a[ip][iq];
+			  z[ip] -= h;
+			  z[iq] += h;
+			  d[ip] -= h;
+			  d[iq] += h;
+			  a[ip][iq]=0.0;
+			  for (j=1;j<=ip-1;j++) {
+				ROTATE(a,j,ip,j,iq)
+				}
+			  for (j=ip+1;j<=iq-1;j++) {
+				ROTATE(a,ip,j,j,iq)
+				}
+			  for (j=iq+1;j<=n;j++) {
+				ROTATE(a,ip,j,iq,j)
+				}
+			  for (j=1;j<=n;j++) {
+				ROTATE(v,j,ip,j,iq)
+				}
+			  ++(*nrot);
+			}
+		  }
+		}
+		for (ip=1;ip<=n;ip++) {
+		  b[ip] += z[ip];
+		  d[ip]=b[ip];
+		  z[ip]=0.0;
+		}
+	  }
+	}
+
+	void computePCA(PointCloud::Ptr cloud, double lamda[3], double vec[3][3])
+	{
+		double w[4];
+		double v[4][4];
+		int i;
+		double wt = 1.0, wts = 0.0;
+		double cx = 0;
+		double cy = 0;
+		double cz = 0;
+
+		for(i=0; i< cloud->size(); i++)
+		{
+			PointT& p = cloud->at(i);
+
+			cx += p.x * wt;
+			cy += p.y * wt;
+			cz += p.z * wt;
+			wts += wt;
+		}
+		cx /= wts;
+		cy /= wts;
+		cz /= wts;
+
+		//data for Jacobi method
+		double a[4][4], *a2[4], **A, *v2[4], **v3;
+		int nrot;
+		A = &a2[0];
+		v3 = &v2[0];
+		for(i=1; i<4; i++)
+		{
+			A[i] = &a[i][0];
+			A[i][1] = A[i][2] = A[i][3] = 0;
+			v3[i] = &v[i][0];
+		}
+
+		//CV matrix
+		for(i=0; i< cloud->size(); i++)
+		{
+			PointT& p = cloud->at(i);
+
+			double vx = (p.x - cx);
+			double vy = (p.y - cy);
+			double vz = (p.z - cz);
+
+			A[1][1] += vx*vx;
+			A[1][2] += vx*vy;
+			A[1][3] += vx*vz;
+
+			A[2][2] += vy*vy;
+			A[2][3] += vy*vz;
+
+			A[3][3] += vz*vz;
+		}
+		A[2][1] = A[1][2];
+		A[3][1] = A[1][3];
+		A[3][2] = A[3][2];
+
+		jacobi(A, 3, w, v3, &nrot);
+
+		int l[3] = {1, 2, 3};
+		if(w[l[0]] < w[l[1]]) swap(l[0], l[1]);
+		if(w[l[1]] < w[l[2]]) swap(l[1], l[2]);
+		if(w[l[0]] < w[l[1]]) swap(l[0], l[1]);
+
+		for(int i = 0; i < 3; i++)
+		{
+			lamda[i] = w[l[i]];
+			for(int j = 0; j < 3; j++)
+			{
+				vec[i][j] = v[l[i]][j + 1];
+			}
+		}
+	}
+
+	
+
+	void computePCA(double cov[3][3], double lamda[3], double vec[3][3])
+	{
+		double w[4];
+		double v[4][4];
+
+
+		//data for Jacobi method
+		double a[4][4], *a2[4], **A, *v2[4], **v3;
+		int nrot;
+		A = &a2[0];
+		v3 = &v2[0];
+		for(int i=1; i<4; i++)
+		{
+			A[i] = &a[i][0];
+			v3[i] = &v[i][0];
+		}
+
+		//CV matrix
+		for(int i=0; i< 3; i++)
+		{
+			for(int j = 0; j < 3; j++)
+			{
+				A[i + 1][j + 1] = cov[i][j];
+			}
+		}
+
+		jacobi(A, 3, w, v3, &nrot);
+
+		int l[3] = {1, 2, 3};
+		if(w[l[0]] < w[l[1]]) swap(l[0], l[1]);
+	    if(w[l[1]] < w[l[2]]) swap(l[1], l[2]);
+		if(w[l[0]] < w[l[1]]) swap(l[0], l[1]);
+
+		for(int i = 0; i < 3; i++)
+		{
+			lamda[i] = w[l[i]];
+			for(int j = 0; j < 3; j++)
+			{
+				vec[i][j] = v[j + 1][l[i]];
+			}
+		}
+	}
+
 	bool More_Plane3D(const Plane3D& a,const Plane3D& b)
 	{
 		return a.inliers > b.inliers;
@@ -229,32 +434,43 @@ namespace Rgbd
 			
 		}
 		
-		for(int i =0;i < coffs.size();i++) cout<<"("<<coffs[i].a<<","<<coffs[i].b<<","<<coffs[i].c<<","<<coffs[i].d<<") "<<"inliers:"<<coffs[i].inliers<<endl;
-		cout<<endl;
+#ifdef DEBUG_PLANE_SEGMENT
+		  for(int i =0;i < coffs.size();i++) cout<<"("<<coffs[i].a<<","<<coffs[i].b<<","<<coffs[i].c<<","<<coffs[i].d<<") "<<"inliers:"<<coffs[i].inliers<<endl;
+		  cout<<endl;
+#endif
 	}
 
-	Plane3D coffCal::getCoff()	
+	Plane3D& coffCal::getCoff()	
 	{
-		double fem = -Ex2*Ey2*Ez2 + Ex2*Eyz*Eyz + Ez2*Exy*Exy + Ey2*Exz*Exz - 2*Exy*Eyz*Exz;
-		Plane3D coff;
-		if(fem - 0 < 1e-10 && fem - 0 > -1e-10){
-			coff.a = (Exz*Ey2 - Exy*Eyz)/(Exy*Exy - Ex2*Ey2);
-			coff.b = -(Exy*Exz - Ex2*Eyz)/(Exy*Exy - Ex2*Ey2);
-			coff.c = 1;
-			coff.d = 0;
-		}else{
-			coff.a = (Ex*Eyz*Eyz - Exz*Ey*Eyz - Ex*Ey2*Ez2 + Exy*Ey*Ez2 + Exz*Ey2*Ez - Exy*Eyz*Ez)/fem;
-			coff.b = (Exz*Exz*Ey - Ex*Exz*Eyz + Ex*Exy*Ez2 - Exy*Exz*Ez - Ex2*Ey*Ez2 + Ex2*Eyz*Ez)/fem;
-			coff.c = (Exy*Exy*Ez + Ex*Exz*Ey2 - Ex*Exy*Eyz - Exy*Exz*Ey + Ex2*Ey*Eyz - Ex2*Ey2*Ez)/fem;
-			coff.d = 1;
+		if(plane.inliers <= 0)
+		{
+			double fem = -Ex2*Ey2*Ez2 + Ex2*Eyz*Eyz + Ez2*Exy*Exy + Ey2*Exz*Exz - 2*Exy*Eyz*Exz;
+			Plane3D coff;
+			if(fem - 0 < 1e-10 && fem - 0 > -1e-10){
+				plane.a = (Exz*Ey2 - Exy*Eyz)/(Exy*Exy - Ex2*Ey2);
+				plane.b = -(Exy*Exz - Ex2*Eyz)/(Exy*Exy - Ex2*Ey2);
+				plane.c = 1;
+				plane.d = 0;
+			}else{
+				plane.a = (Ex*Eyz*Eyz - Exz*Ey*Eyz - Ex*Ey2*Ez2 + Exy*Ey*Ez2 + Exz*Ey2*Ez - Exy*Eyz*Ez)/fem;
+				plane.b = (Exz*Exz*Ey - Ex*Exz*Eyz + Ex*Exy*Ez2 - Exy*Exz*Ez - Ex2*Ey*Ez2 + Ex2*Eyz*Ez)/fem;
+				plane.c = (Exy*Exy*Ez + Ex*Exz*Ey2 - Ex*Exy*Eyz - Exy*Exz*Ey + Ex2*Ey*Eyz - Ex2*Ey2*Ez)/fem;
+				plane.d = 1;
+			}
+			double u = NORM2(plane.a, plane.b, plane.c);
+			plane.a /= u;
+			plane.b /= u;
+			plane.c /= u;
+			plane.d /= u;
+			plane.inliers = inliers;
 		}
-		double u = NORM2(coff.a, coff.b, coff.c);
-		coff.a /= u;
-		coff.b /= u;
-		coff.c /= u;
-		coff.d /= u;
 
-		return coff;
+		return plane;
+	}
+
+	void coffCal::calAxis()
+	{
+		computePCA(cov, lamda, vec);
 	}
 
 	double p_distance(Plane3D& a, Plane3D& b)

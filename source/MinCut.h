@@ -53,6 +53,7 @@ namespace Rgbd
 		}
 
 		void addEdge(int v1, int v2, double weight);
+		void addEdge(int v1, int v2, double weight1, double weight2);
 		void swapVertexes(int v1, int v2);
 		double  minCut(std::vector<int>& setS, std::vector<int>& setT);
 	private:
