@@ -14,7 +14,7 @@ using namespace Rgbd;
 void runReconstruction()
 {
    RgbdReader reader;
-   reader.Read("D:/PCL/record.ONI", 80, 10, 1, 0.1);
+   reader.Read("D:/PCL/record.ONI", 0, 10, 20, 0.1);
    reader.ShowPointCoud();
 
    /*

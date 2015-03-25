@@ -79,7 +79,7 @@ namespace Rgbd
 	bool Block::canCombiner(Block& b)
 	{
 		double angthre = 0.85;
-		double angle = p_angle(coff.getCoff(), b.coff.getCoff());
+		double angle = p_angle(coff, b.coff);
 		double rate = CombinerRate(b);
 		//if(rate <= 1.0) return true;
 		if(angle > angthre && rate < 1.3) return true;
@@ -104,6 +104,12 @@ namespace Rgbd
 		double selfVolume = bound.volume();
 		double rate = combX * combY * combZ / (newbVolume + selfVolume);
 		return rate;
+	}
+
+	double Block::insideRate(PointT& p)
+	{
+		double inside = isInBlock(p) ? 1.0 : 0.0;
+		return 1;
 	}
 
 	bool Block::isInBlock(Block& b)
@@ -599,6 +605,8 @@ namespace Rgbd
 
 	bool BlockGraph::KeyEdgeJudgement(int block_a, int block_b)
 	{
+		if(blocks[block_a].coff.seged_id >= 0 && blocks[block_b].coff.seged_id >= 0 && blocks[block_a].coff.seged_id != blocks[block_b].coff.seged_id) return false;
+
 		double a2b = spaceDistanceCache[block_a][block_b] * blocks[block_a].inliers;
 	    //double b2a = spaceDistanceCache[block_b][block_a] * blocks[block_b].inliers;
 
@@ -768,7 +776,8 @@ namespace Rgbd
 		return space_weight;  // + color_weight;
 	}
 
-	int Segmentation::nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, vector<int>& tags, std::vector<Block>& blocks, std::vector<Block>& seged_blocks)
+	int Segmentation::nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, vector<int>& tags,
+		                          std::vector<Block>& blocks, std::vector<Block>& seged_blocks)
 	{
 		std::vector<Plane3D> planes;
 		double disthre = 0.05;
@@ -776,9 +785,10 @@ namespace Rgbd
 		dbplane_segment(cloud, normals, 1000, disthre, angthre, disthre, planes, tags);
 		int tagCount = planes.size();
 		vector<int> newTags_(tagCount);
+		vector<int> foundTags(seged_blocks.size(), -1);
 		if(seged_blocks.size() > 0)
 		{
-			tagCount = calSegedTags(cloud, normals, tags, planes, newTags_, seged_blocks);
+			tagCount = calSegedTags(cloud, normals, tags, newTags_, foundTags, planes, seged_blocks);
 			
 		}else
 		{
@@ -789,16 +799,16 @@ namespace Rgbd
 		}
 
 		vector<coffCal> coffs;
-		calNewCoffandTag(cloud, normals, tags, tagCount, newTags_, coffs);
+		calNewCoffandTag(cloud, normals, tags, tagCount, newTags_, foundTags, coffs);
 
 		std::vector<Block> virtual_blocks;
-
+		//static int loop = 2;
 		while(true)
 	    //for(int i = 0; i < 2; i++)
 		{
 			vector<int> newTags(tagCount);
 			BlockGraph graph(cloud, normals, tags, coffs, virtual_blocks);
-			if(true)//(tagCount <= 1)
+			if(tagCount <= 1)
 			{
 				graph.getBlocks(blocks);
 				break;
@@ -813,7 +823,7 @@ namespace Rgbd
 			}
 			tagCount = newTagCount;
 			vector<coffCal> newCoffs;
-			calNewCoffandTag(cloud, normals, tags, tagCount, newTags, newCoffs);
+			calNewCoffandTag(cloud, normals, tags, tagCount, newTags, coffs, newCoffs);
 			coffs = newCoffs;
 		}
 
@@ -826,29 +836,31 @@ namespace Rgbd
 	}
 
 	void Segmentation::calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			                  std::vector<int>& tags, int size, std::vector<int>& newTags, std::vector<coffCal>& newCoffs)
+			                  std::vector<int>& tags, int size, std::vector<int>& newTags, 
+							  std::vector<int>& foundTags, std::vector<coffCal>& newCoffs)
 	{
 		for(int i = 0; i < size; i++)
 		{
 			newCoffs.push_back(coffCal());
+		}
+		for(int i = 0; i < foundTags.size(); i++)
+		{
+			if(foundTags[i] >= 0)
+			{
+				newCoffs[foundTags[i]].seged_id = i;
+			}
 		}
 		for(int i = 0; i < tags.size(); i++)
 		{
 			if(tags[i] >= 0 && tags[i] < newTags.size())
 			{
 				tags[i] = newTags[tags[i]];
-				newCoffs[tags[i]].addPoint(cloud->at(i));
+				if(tags[i] >= 0)
+				{
+				   newCoffs[tags[i]].addPoint(cloud->at(i));
+				}
 			}
 		}
-		/*
-		for(int i = 0; i < tags.size(); i++)
-		{
-			if(tags[i] >= 0 && tags[i] < size)
-			{
-				newCoffs[tags[i]].addPointForCov(cloud->at(i));
-			}
-		}
-		*/
 
 		for(int i = 0; i < size; i++)
 		{
@@ -857,7 +869,44 @@ namespace Rgbd
 		}
 	}
 
-	int Segmentation::calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, std::vector<Plane3D>& planes, std::vector<int>& newTags, std::vector<Block>& seged_blocks)
+	void Segmentation::calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+			                  std::vector<int>& tags, int size, std::vector<int>& newTags,
+							  std::vector<coffCal>& oldCoffs, std::vector<coffCal>& newCoffs)
+	{
+		for(int i = 0; i < size; i++)
+		{
+			newCoffs.push_back(coffCal());
+		}
+		for(int i = 0; i < oldCoffs.size(); i++)
+		{
+			int seged_id = oldCoffs[i].seged_id;
+			if(seged_id >= 0)
+			{
+				newCoffs[newTags[i]].seged_id = seged_id;
+			}
+		}
+		for(int i = 0; i < tags.size(); i++)
+		{
+			if(tags[i] >= 0 && tags[i] < newTags.size())
+			{
+				tags[i] = newTags[tags[i]];
+				if(tags[i] >= 0)
+				{
+				   newCoffs[tags[i]].addPoint(cloud->at(i));
+				}
+			}
+		}
+
+		for(int i = 0; i < size; i++)
+		{
+			Plane3D coff = newCoffs[i].getCoff();
+			newCoffs[i].calAxis();
+		}
+	}
+
+	int Segmentation::calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+			             std::vector<int>& tags, std::vector<int>& newTags, std::vector<int>& foundTags,
+			             std::vector<Plane3D>& planes, std::vector<Block>& seged_blocks)
 	{
 		double inside_threshold = 0.9;
 		int** inside = new int*[planes.size()];
@@ -879,20 +928,30 @@ namespace Rgbd
 				}
 			}
 		}
-		vector<int> foundTags(seged_blocks.size(), -1);
+		
 		int foundCount = 0;
 		for(int i = 0;i < planes.size(); i++)
 		{
-			int maxj = 0;
-			for(int j = 1; j < seged_blocks.size(); j++)
+			double maxr = 0;
+			int maxj = -1;
+			for(int j = 0; j < seged_blocks.size(); j++)
 			{
-				if(inside[i][j] > inside[i][maxj]) maxj = j;
+				double rate = static_cast<double>(inside[i][j]) / planes[i].inliers;
+				if(rate > maxr)
+			    {
+					maxr = rate;
+					maxj = j;
+				}
 			}
 
-			if(static_cast<double>(inside[i][maxj]) / planes[i].inliers >= inside_threshold)
+			if(maxr >= inside_threshold)
 			{
 				if(foundTags[maxj] < 0) foundTags[maxj] = foundCount++;
 				newTags[i] = foundTags[maxj];
+			}
+			else if(planes[i].inliers < 100)
+			{
+				newTags[i] = -1;
 			}
 			else
 			{

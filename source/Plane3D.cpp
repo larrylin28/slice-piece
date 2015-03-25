@@ -296,7 +296,9 @@ namespace Rgbd
 					search.pop();
 					int y = p / cloud->width;
 					int x = p - y*cloud->width;
+
 					pcl::Normal np = normals->at(p);
+					
 					avern[0] = (avern[0]*averc + np.normal_x)/(averc + 1);
 					avern[1] = (avern[1]*averc + np.normal_y)/(averc + 1);
 					avern[2] = (avern[2]*averc + np.normal_z)/(averc + 1);
@@ -305,6 +307,7 @@ namespace Rgbd
 					avern[0] /= norm;
 					avern[1] /= norm;
 					avern[2] /= norm;
+					
 
 					pcl::PointXYZRGB pp = cloud->at(p);
 
@@ -319,6 +322,16 @@ namespace Rgbd
 					Eyz += pp.y*pp.z;
 					Exz += pp.x*pp.z;
 
+					/*
+					avern[0] = (Ex*Eyz*Eyz - Exz*Ey*Eyz - Ex*Ey2*Ez2 + Exy*Ey*Ez2 + Exz*Ey2*Ez - Exy*Eyz*Ez);
+					avern[1] = (Exz*Exz*Ey - Ex*Exz*Eyz + Ex*Exy*Ez2 - Exy*Exz*Ez - Ex2*Ey*Ez2 + Ex2*Eyz*Ez);
+					avern[2] = (Exy*Exy*Ez + Ex*Exz*Ey2 - Ex*Exy*Eyz - Exy*Exz*Ey + Ex2*Ey*Eyz - Ex2*Ey2*Ez);
+					double norm = NORM2(avern[0], avern[1], avern[2]);
+					avern[0] /= norm;
+					avern[1] /= norm;
+					avern[2] /= norm;
+					*/
+
 					for(int jx = x-1;jx <= x+1;jx++)
 					{
 						if(jx < 0) continue;
@@ -330,10 +343,10 @@ namespace Rgbd
 							int nid = jy*cloud->width+jx;
 							if(seg[nid] == -1 && !ISNAN(normals->at(nid).normal_x))
 							{
-								pcl::Normal nn = normals->at(nid);
-								pcl::PointXYZRGB pn = cloud->at(nid);
+								pcl::Normal& nn = normals->at(nid);
+								pcl::PointXYZRGB& pn = cloud->at(nid);
 								//double disn = sqrt((np.normal_x-nn.normal_x)*(np.normal_x-nn.normal_x)+(np.normal_y-nn.normal_y)*(np.normal_y-nn.normal_y)+(np.normal_z-nn.normal_z)*(np.normal_z-nn.normal_z));
-								double angn = avern[0] * nn.normal_x + avern[1] * nn.normal_y + avern[2] * nn.normal_z;
+								double angn = abs(avern[0] * nn.normal_x + avern[1] * nn.normal_y + avern[2] * nn.normal_z);
 								double disp = NORM2(pp.x-pn.x, pp.y-pn.y, pp.z-pn.z);
 								//double dis = sqrt(disn+disp);
 								if(angn > athre && disp < sthre)
@@ -426,11 +439,28 @@ namespace Rgbd
 		sort(coffs.begin(), coffs.end(),More_Plane3D);
 		for(int i = 0;i < coffs.size();i++)
 		{
+			coffs[i].inliers = 0;
 			valid[coffs[i].id] = i;
 		}
 		for(int i = 0;i < cloud->size();i++)
 		{
-			if(seg[i] >= 0) seg[i] = valid[seg[i]];
+			if(seg[i] >= 0)
+			{
+				if(valid[seg[i]] < 0) seg[i] = -1;
+				else
+				{
+					pcl::PointXYZRGB& pn = cloud->at(i);
+					pcl::Normal& nn = normals->at(i);
+					Plane3D& coff = coffs[valid[seg[i]]];
+					double angn = abs(coff.a * nn.normal_x + coff.b * nn.normal_y + coff.c * nn.normal_z);
+					if(angn > athre)
+					{
+						seg[i] = valid[seg[i]];
+						coffs[seg[i]].inliers++;
+					}
+					else seg[i] = -1;
+				}
+			}
 			
 		}
 		
@@ -485,11 +515,24 @@ namespace Rgbd
 
 	double p_angle(Plane3D& a, Plane3D& b)
 	{
-		return (a.a * b.a + a.b * b.b + a.c * b.c)/sqrt(a.a*a.a + a.b*a.b + a.c*a.c)/sqrt(b.a*b.a + b.b*b.b + b.c*b.c);
+		return abs(a.a * b.a + a.b * b.b + a.c * b.c)/sqrt(a.a*a.a + a.b*a.b + a.c*a.c)/sqrt(b.a*b.a + b.b*b.b + b.c*b.c);
 	}
 
 	double p_angle(Plane3D& p, double a, double b, double c, double d)
 	{
-		return (p.a * a + p.b * b + p.c * c)/sqrt(p.a*p.a + p.b*p.b + p.c*p.c)/sqrt(a*a + b*b + c*c);
+		return abs(p.a * a + p.b * b + p.c * c)/sqrt(p.a*p.a + p.b*p.b + p.c*p.c)/sqrt(a*a + b*b + c*c);
+	}
+
+	double p_angle(Plane3D& p, coffCal& c)
+	{
+		double* normal = c.vec[2];
+		return abs(p.a * normal[0] + p.b * normal[1] + p.c * normal[2])/sqrt(p.a*p.a + p.b*p.b + p.c*p.c)/sqrt(normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]);
+	}
+
+	double p_angle(coffCal& a, coffCal& b)
+	{
+		double* n1 = a.vec[2];
+		double* n2 = b.vec[2];
+		return abs(n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2])/sqrt(n1[0]*n1[0] + n1[1]*n1[1] + n1[2]*n1[2])/sqrt(n2[0]*n2[0] + n2[1]*n2[1] + n2[2]*n2[2]);
 	}
 }

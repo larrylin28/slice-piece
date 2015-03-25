@@ -26,6 +26,9 @@ namespace Rgbd
 
 	struct coffCal
 	{
+		//belong to seged Blocks mark
+		int seged_id;
+
 		double Ex;
 		double Ey;
 		double Ez;
@@ -41,7 +44,7 @@ namespace Rgbd
 		double vec[3][3];
 		Plane3D plane;
 
-		coffCal():Ex(0),Ey(0),Ez(0),Ex2(0),Ey2(0),Ez2(0),Exy(0),Eyz(0),Exz(0),inliers(0)
+		coffCal():seged_id(-1),Ex(0),Ey(0),Ez(0),Ex2(0),Ey2(0),Ez2(0),Exy(0),Eyz(0),Exz(0),inliers(0)
 		{
 			for(int i = 0; i < 3; i++)
 			{
@@ -143,6 +146,9 @@ namespace Rgbd
 
 	double p_angle(Plane3D& a, Plane3D& b);
 	double p_angle(Plane3D& p, double a, double b, double c, double d);
+
+	double p_angle(Plane3D& p, coffCal& c);
+	double p_angle(coffCal& a, coffCal& b);
 
 	Plane3D coff_cloud(pcl::PointCloud<pcl::Normal>::Ptr normals, PointCloud::Ptr cloud);
 

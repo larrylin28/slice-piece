@@ -61,6 +61,7 @@ namespace Rgbd
 		double intersection(Block& b);
 		double CombinerRate(Block& b);
 		bool canCombiner(Block& b);
+		double insideRate(PointT& p);
 		bool isInBlock(PointT& p);
 		bool isInBlock(Block& b);
 		void output();
@@ -120,10 +121,17 @@ namespace Rgbd
 		Segmentation(){}
 		~Segmentation(){}
 
-		int nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, std::vector<Block>& blocks, std::vector<Block>& seged_blocks);
+		int nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags,
+			            std::vector<Block>& blocks, std::vector<Block>& seged_blocks);
 		void calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			                  std::vector<int>& tags, int size, std::vector<int>& newTags, std::vector<coffCal>& newCoffs);
-		int calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, std::vector<Plane3D>& planes, std::vector<int>& newTags, std::vector<Block>& seged_blocks);
+			                  std::vector<int>& tags, int size, std::vector<int>& newTags, 
+							  std::vector<int>& foundTags, std::vector<coffCal>& newCoffs);
+		void calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+			                  std::vector<int>& tags, int size, std::vector<int>& newTags, 
+							  std::vector<coffCal>& oldCoffs, std::vector<coffCal>& newCoffs);
+		int calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+			             std::vector<int>& tags, std::vector<int>& newTags, std::vector<int>& foundTags,
+			             std::vector<Plane3D>& planes, std::vector<Block>& seged_blocks);
 
 
 	public:

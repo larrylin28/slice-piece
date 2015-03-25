@@ -112,13 +112,17 @@ namespace Rgbd
 		int MultiTsdfModel::addNewBlock(PointCloud::Ptr cloud, PointNormal::Ptr normals, Block& b, int tag, std::vector<int>& tags)
 		{
 			int newtag = -1;
-			for(int i = 0;i < seged_blocks.size();i++)
+			if(b.coff.seged_id >= 0) newtag = b.coff.seged_id;
+			else
 			{
-				//belong to seged blocks
-				if(seged_blocks[i].isInBlock(b) || seged_blocks[i].canCombiner(b))
+				for(int i = 0;i < seged_blocks.size();i++)
 				{
-					newtag = i;
-					break;
+					//belong to seged blocks
+					if(seged_blocks[i].isInBlock(b) || seged_blocks[i].canCombiner(b))
+					{
+						newtag = i;
+						break;
+					}
 				}
 			}
 			if(newtag >= 0)
