@@ -43,7 +43,7 @@ namespace Rgbd
 			             double maxx,double maxy, double maxz,double minx,double miny,double minz);
 
 		virtual void dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY);
+			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader);
 
 		void Traversal(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
 			           Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY);

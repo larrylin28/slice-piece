@@ -117,7 +117,7 @@ namespace Rgbd
 	}
 
 	void TsdfModel::dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			                   Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY)
+			                   Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader)
 	{
 		Plane3D coff = coff_cloud(normals,cloud);
 		double dis = (coff.a*current_coff.a)+(coff.b*current_coff.b)+(coff.c*current_coff.c);

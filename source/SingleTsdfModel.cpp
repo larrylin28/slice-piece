@@ -1,8 +1,10 @@
+#include "Segmentation.h"
 #include "SingleTsdfModel.h"
 
 namespace Rgbd
 {	
-        SingleTsdfModel::SingleTsdfModel()
+	
+        SingleTsdfModel::SingleTsdfModel(Block& block)
 		{
 		}
 
@@ -11,8 +13,14 @@ namespace Rgbd
 		}
 
 		void SingleTsdfModel::dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY)
+			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader)
 
+		{
+		}
+
+		void SingleTsdfModel::dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader,
+						int specTag, std::vector<int>& tags)
 		{
 		}
 

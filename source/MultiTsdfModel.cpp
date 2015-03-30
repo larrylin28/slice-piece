@@ -1,14 +1,21 @@
+#include "RGBDReader.h"
+#include "Segmentation.h"
 #include "MultiTsdfModel.h"
 
 //pcl
+#include <pcl/registration/ia_ransac.h>
 #include <pcl/visualization/pcl_visualizer.h>
+
 
 #define GETCOLORR(i) (i%4)*1.0/3
 #define GETCOLORG(i) ((i+1)%5)*1.0/4
 #define GETCOLORB(i) (((1000-i)+(i/4))%4)*1.0/3
 
-#define DEBUG_BLOCK_SEGMENT
+//#define DEBUG_BLOCK_SEGMENT
 #define DEBUG_SHOW_BOUND
+#define DEBUG_SHOW_SEG
+
+#define SPECIAL_ID 0
 
 using namespace std;
 
@@ -21,6 +28,52 @@ namespace Rgbd
 
 		MultiTsdfModel::~MultiTsdfModel()
 		{
+		}
+
+		void MultiTsdfModel::showNewRegistration(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, int extraTag, int frameId)
+		{
+			static boost::shared_ptr<pcl::visualization::PCLVisualizer> vis1;
+			if(!vis1)
+			{
+				static boost::shared_ptr<pcl::visualization::PCLVisualizer> temp(new pcl::visualization::PCLVisualizer ("Reg"));
+				vis1 = temp;
+				vis1->initCameraParameters ();
+				vis1->setBackgroundColor (0.1, 0.1, 0.1);
+				vis1->addText("point clouds", 10, 10, "point clouds");
+			}
+
+			
+
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr showCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+			Eigen::Matrix4f tran = extra_Trans[frameId][extraTag];
+			cout<<tran;
+
+			for(int i = 0; i < cloud->size(); i++)
+			{
+				if(tags[i] == extraTag)
+				{
+					showCloud->push_back(cloud->at(i));
+				}
+			}
+
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr transCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+			pcl::transformPointCloud(*showCloud, *transCloud, tran);
+
+			
+			pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_cloud(transCloud);
+			stringstream ss;
+			ss<<"cloud"<< frameId;
+			vis1->addPointCloud<pcl::PointXYZRGB> (transCloud, rgb_cloud, ss.str());
+			vis1->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, ss.str());
+			vis1->resetStoppedFlag();
+			
+			while (!vis1->wasStopped())
+			{
+				//在此处可以添加其他处理
+				vis1->spinOnce (100);
+				//boost::this_thread::sleep (boost::posix_time::microseconds (100000));
+			}
 		}
 
 		void MultiTsdfModel::showSegmentation(PointCloud::Ptr cloud, PointNormal::Ptr normals, vector<int>& tags, std::vector<Block>& blocks, int tagcount)
@@ -177,8 +230,10 @@ namespace Rgbd
 		    vector<Block> blocks;
 		    int count = seg.nextSegment(cloud, normals, tags, blocks, seged_blocks);
 
+#ifdef DEBUG_SHOW_SEG
 			//show segmentation
 			showSegmentation(cloud, normals, tags, blocks, count);
+#endif
 
 			
 			//add blocks
@@ -212,17 +267,59 @@ namespace Rgbd
 				cout<<endl;
 #endif
 
+#ifdef DEBUG_SHOW_SEG
 			//show segmentation
 			showSegmentation(cloud, normals, tags, seged_blocks, seged_blocks.size());
+#endif
+
+			seged_tags.push_back(tags);
+
+			
 			
 			
 		}
 
+		void MultiTsdfModel::doNewRegistration(PointCloud::Ptr cloud, PointNormal::Ptr normals, Eigen::Matrix4f tran, RgbdReader* reader)
+		{
+			int frameId = seged_tags.size() - 1;
+			int special_id = SPECIAL_ID;
+			std::vector<Eigen::Matrix4f> trs;
+			extra_Trans.push_back(trs);
+			for(int i = 0; i < seged_blocks.size(); i++)
+			{
+				if(i == special_id && frameId > 0 && extra_Trans[frameId - 1].size() > special_id)
+				{
+					Eigen::Matrix4f tr = reader->getExtraSlam(frameId, 0.1, i, seged_tags[frameId - 1], seged_tags[frameId], extra_Trans[frameId-1][i]);
+					Eigen::Matrix4f gtr = extra_Trans[frameId - 1][i]*tr;
+					extra_Trans[frameId].push_back(gtr);
+				}
+				else
+				{
+					extra_Trans[frameId].push_back(Eigen::Matrix4f::Identity());	
+				}
+			}
+			//show new registration
+			if(special_id < seged_blocks.size())
+			{
+				showNewRegistration(cloud, normals, seged_tags[frameId], special_id, frameId);
+			}
+		}
+
 		void MultiTsdfModel::dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY)
+			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader)
 
 		{
 			buildBlocks(cloud, normals, tran);
+			for(int i = nodes.size(); i < seged_blocks.size(); i++)
+			{
+				SingleTsdfModel node(seged_blocks[i]);
+				nodes.push_back(node);
+			}
+			doNewRegistration(cloud, normals, tran, reader);
+
+			int id = SPECIAL_ID;
+			int frameId = seged_tags.size() - 1;
+			nodes[id].dataFusion(cloud, normals, tran, nHalfXres, nHalfYres, fCoeffX, fCoeffY, reader, id, seged_tags[frameId]);
 		}
 
 		void MultiTsdfModel::rayCast(double ix, double iy, double ax, double ay, double devide,

@@ -355,7 +355,15 @@ namespace Rgbd
 
 	void RgbdReader::putDataToSdf(SdfModel* sdf, int frameId)
 	{
-		sdf->dataFusion(datas->transpointClouds[frameId], datas->transpointNormals[frameId], datas->trans[frameId], nHalfXres, nHalfYres, fCoeffX , fCoeffY);
+		sdf->dataFusion(datas->transpointClouds[frameId], datas->transpointNormals[frameId], datas->trans[frameId], nHalfXres, nHalfYres, fCoeffX , fCoeffY, this);
+	}
+
+	Eigen::Matrix4f RgbdReader::getExtraSlam(int frameId, double dthresh, int extraTag, vector<int>& oldTags, vector<int>& newTags, Eigen::Matrix4f& extraTr)
+	{
+		Eigen::Matrix4f init = Eigen::Matrix4f::Identity();
+		Eigen::Matrix4f tran = cpuExtraICP(datas->transpointNormals[frameId - 1], datas->transpointClouds[frameId - 1], datas->transpointClouds[frameId], datas->trans[frameId - 1].inverse(), init, nHalfXres, nHalfYres, fCoeffX, fCoeffY,dthresh, extraTag, &(oldTags[0]), &(newTags[0]), extraTr);
+
+		return tran;
 	}
 
 	void RgbdReader::doSlam(int frameID, double dthresh)
@@ -388,7 +396,7 @@ namespace Rgbd
 			datas->get_match(frameID,frameID-1,init,variance,false);
 
 			//Eigen::Matrix4f init2 = datas->trans[frameID - 1];
-			Eigen::Matrix4f tran = gpuICP(datas->transpointNormals[frameID - 1], datas->transpointClouds[frameID - 1], datas->pointClouds[frameID], datas->trans[frameID - 1].inverse(), init, nHalfXres, nHalfYres, fCoeffX, fCoeffY,dthresh);
+			Eigen::Matrix4f tran = cpuICP(datas->transpointNormals[frameID - 1], datas->transpointClouds[frameID - 1], datas->pointClouds[frameID], datas->trans[frameID - 1].inverse(), init, nHalfXres, nHalfYres, fCoeffX, fCoeffY,dthresh);
 
 			pcl::PointCloud<pcl::PointXYZRGB>::Ptr transCloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 			pcl::transformPointCloud(*(datas->pointClouds[frameID]), *transCloud, tran);

@@ -4,7 +4,7 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 
-#define DEBUG_PLANE_SEGMENT
+//#define DEBUG_PLANE_SEGMENT
 
 namespace Rgbd
 {

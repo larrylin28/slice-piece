@@ -77,6 +77,8 @@ namespace Rgbd
 		void putDataToSdf(SdfModel* sdf, int frameId);
 		int getFrameCount();
 		Eigen::Matrix4f getTrans(int frameId);
+		Eigen::Matrix4f getExtraSlam(int frameId, double dthresh, int extraTag, std::vector<int>& oldTags, std::vector<int>& newTags, Eigen::Matrix4f& extraTr);
+
 
 	private:
 		bool initReading(std::string sFilename);

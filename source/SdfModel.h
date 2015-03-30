@@ -10,6 +10,7 @@ namespace Rgbd
     typedef pcl::PointCloud<PointT> PointCloud;
 	typedef pcl::PointCloud<pcl::Normal> PointNormal;
 	
+	class RgbdReader;
 
 	class SdfModel
 	{
@@ -23,7 +24,7 @@ namespace Rgbd
 		};
 
 		virtual void dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY) = 0;
+			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader) = 0;
 
 		virtual void rayCast(double ix, double iy, double ax, double ay, double devide,
 			                 Eigen::Matrix4f tran, 

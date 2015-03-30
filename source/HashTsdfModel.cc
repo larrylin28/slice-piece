@@ -14,7 +14,7 @@ namespace Rgbd
 	}
 
 	void HashTsdfModel::dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
-			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY)
+			            Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader)
 	{
 	}
 
