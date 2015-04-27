@@ -13,7 +13,7 @@ using namespace std;
 namespace Rgbd
 {
 	
-	Block::Block():EL(0),Ea(0),Eb(0),VL(0),Va(0),Vb(0),inliers(0)
+	Block::Block():EL(0),Ea(0),Eb(0),VL(0),Va(0),Vb(0),inliers(0),belongId(-1)
 	{
 	}
 
@@ -147,7 +147,8 @@ namespace Rgbd
 		
 		double v1 = (bound.maxX() - bound.minX()) * (bound.maxY() - bound.minY()) * (bound.maxZ() - bound.minZ());
 		double v2 = (bound.maxX() - bound.minX() + ox) * (bound.maxY() - bound.minY() + oy) * (bound.maxZ() - bound.minZ() + oz);
-		return sqrt(v2 - v1);
+		//return sqrt(v2 - v1);
+		return pow(v2-v1,1.0/3.0);
 		//return (v2 - v1) / v1;
 	}
 
@@ -686,6 +687,7 @@ namespace Rgbd
 					{
 						isKeyEdge[i][j] = true;
 						isKeyEdge[j][i] = true;
+						
 						if(!graph.haveEdge(i, j))
 						{
 							graph.addEdge(i, j, blockEdgeWeight(i, j, false));
@@ -693,6 +695,7 @@ namespace Rgbd
 							edgeCount[j]++;
 
 						}
+						
 					}
 				}
 
@@ -776,7 +779,7 @@ namespace Rgbd
 		return space_weight;  // + color_weight;
 	}
 
-	int Segmentation::nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, vector<int>& tags,
+	int Segmentation::nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, vector<int>& tags, vector<int>& initTags,
 		                          std::vector<Block>& blocks, std::vector<Block>& seged_blocks)
 	{
 		std::vector<Plane3D> planes;
@@ -788,7 +791,7 @@ namespace Rgbd
 		vector<int> foundTags(seged_blocks.size(), -1);
 		if(seged_blocks.size() > 0)
 		{
-			tagCount = calSegedTags(cloud, normals, tags, newTags_, foundTags, planes, seged_blocks);
+			tagCount = calSegedTags(cloud, normals, initTags, tags, newTags_, foundTags, planes, seged_blocks);
 			
 		}else
 		{
@@ -801,10 +804,10 @@ namespace Rgbd
 		vector<coffCal> coffs;
 		calNewCoffandTag(cloud, normals, tags, tagCount, newTags_, foundTags, coffs);
 
+		//int static loop = 1;
 		std::vector<Block> virtual_blocks;
-		//static int loop = 2;
 		while(true)
-	    //for(int i = 0; i < 2; i++)
+	    //for(int i = 0; i < 0; i++)
 		{
 			vector<int> newTags(tagCount);
 			BlockGraph graph(cloud, normals, tags, coffs, virtual_blocks);
@@ -818,6 +821,7 @@ namespace Rgbd
 
 		    if(newTagCount == tagCount)
 			{
+				//loop--;
 				graph.getBlocks(blocks);
 				break;
 			}
@@ -835,7 +839,7 @@ namespace Rgbd
 		//return coffs.size();
 	}
 
-	void Segmentation::calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+	void Segmentation::calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals,
 			                  std::vector<int>& tags, int size, std::vector<int>& newTags, 
 							  std::vector<int>& foundTags, std::vector<coffCal>& newCoffs)
 	{
@@ -869,7 +873,7 @@ namespace Rgbd
 		}
 	}
 
-	void Segmentation::calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+	void Segmentation::calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals,
 			                  std::vector<int>& tags, int size, std::vector<int>& newTags,
 							  std::vector<coffCal>& oldCoffs, std::vector<coffCal>& newCoffs)
 	{
@@ -904,11 +908,11 @@ namespace Rgbd
 		}
 	}
 
-	int Segmentation::calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+	int Segmentation::calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, vector<int>& initTags,
 			             std::vector<int>& tags, std::vector<int>& newTags, std::vector<int>& foundTags,
 			             std::vector<Plane3D>& planes, std::vector<Block>& seged_blocks)
 	{
-		double inside_threshold = 0.9;
+		double inside_threshold = 0.7;
 		int** inside = new int*[planes.size()];
 		for(int i = 0; i <planes.size(); i++)
 		{
@@ -922,9 +926,13 @@ namespace Rgbd
 		{
 			if(tags[i] >= 0 && tags[i] < planes.size())
 			{
-				for(int j = 0; j< seged_blocks.size(); j++)
+				if(initTags[i] >= 0) inside[tags[i]][initTags[i]]++;
+				else
 				{
-					if(seged_blocks[j].isInBlock(cloud->at(i))) inside[tags[i]][j]++;
+					for(int j = 0; j< seged_blocks.size(); j++)
+					{
+						if(seged_blocks[j].isInBlock(cloud->at(i))) inside[tags[i]][j]++;
+					}
 				}
 			}
 		}

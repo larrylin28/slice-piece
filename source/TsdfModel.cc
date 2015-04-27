@@ -30,10 +30,11 @@ namespace Rgbd
 
 	TsdfModel::TsdfModel(Eigen::Matrix4f ltran, 
 		                double maxx,double maxy, double maxz,double minx,double miny,double minz,
-						double dev,double th,double ep)
+						double dev,double th,double ep,
+						bool dorotate)
 	                    :local_tran(ltran),
 						maxX(maxx),maxY(maxy),maxZ(maxz),minX(minx),minY(miny),minZ(minz),
-						devide(dev),thre(th),epsi(ep)
+						devide(dev),thre(th),epsi(ep),doRotate(dorotate)
 	{
 
 		current_coff.inliers = 0;
@@ -119,73 +120,77 @@ namespace Rgbd
 	void TsdfModel::dataFusion(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
 			                   Eigen::Matrix4f tran, int nHalfXres, int nHalfYres, double fCoeffX, double fCoeffY, RgbdReader* reader)
 	{
-		Plane3D coff = coff_cloud(normals,cloud);
-		double dis = (coff.a*current_coff.a)+(coff.b*current_coff.b)+(coff.c*current_coff.c);
-		if(current_coff.inliers == 0 || dis < 0.7)
+		if(doRotate)
 		{
-			current_coff = coff;
-		}
-
-		double before[4];
-		double after[4];
-		before[0] = coff.a;
-		before[1] = coff.b;
-		before[2] = coff.c;
-		before[3] = coff.d;
-
-		after[0] = 0;
-		after[1] = 0;
-		after[2] = 1;
-		after[3] = 0;
-
-		Eigen::Matrix4f zero;  
-		zero << 1, 0, 0, 0,  
-				0, 1, 0, 0,  
-				0, 0, 1, 0,  
-				0, 0, 0, 1;
-
-		//Eigen::Matrix4f local = CalTransport(before,after);
-		Eigen::Matrix4f local = zero;
-		Eigen::Matrix4f local_c = local.inverse();
-
-		bool flag = false;
-		double max_X,max_Y,max_Z,min_X,min_Y,min_Z;
-		for(int i = 0;i < cloud->size();i++)
-		{
-			pcl::PointXYZRGB pp = cloud->at(i);
-			Eigen::Vector4f v;
-			v[0] = pp.x ;
-			v[1] = pp.y;
-			v[2] = pp.z;
-			v[3] = 1;
-			Eigen::Vector4f t = local_c * v;
-			if(!flag)
+			Plane3D coff = coff_cloud(normals,cloud);
+			double dis = (coff.a*current_coff.a)+(coff.b*current_coff.b)+(coff.c*current_coff.c);
+			if(current_coff.inliers == 0 || dis < 0.7)
 			{
-				max_X = t[0];
-				max_Y = t[1];
-				max_Z = t[2];
-				min_X = t[0];
-				min_Y = t[1];
-				min_Z = t[2];
-				flag = true;
-			}else{
-				if(t[0] > max_X) max_X = t[0];
-				if(t[1] > max_Y) max_Y = t[1];
-				if(t[2] > max_Z) max_Z = t[2];
-				if(t[0] < min_X) min_X = t[0];
-				if(t[1] < min_Y) min_Y = t[1];
-				if(t[2] < min_Z) min_Z = t[2];
+				current_coff = coff;
 			}
-		}
-		
-		
-		//cout<<max_X-min_X<<","<<max_Y-min_Y<<","<<max_Z-min_Z<<endl;
-		double dx = (max_X - min_X);
-		double dy = (max_Y - min_Y);
-		double dz = (max_Z - min_Z);
-		cout<<"size:"<<dx<<","<<dy<<","<<dz<<endl;
 
-		changeLocal(local, max_X, max_Y, max_Z, min_X, min_Y, min_Z);
+			double before[4];
+			double after[4];
+			before[0] = coff.a;
+			before[1] = coff.b;
+			before[2] = coff.c;
+			before[3] = coff.d;
+
+			after[0] = 0;
+			after[1] = 0;
+			after[2] = 1;
+			after[3] = 0;
+
+			Eigen::Matrix4f zero;  
+			zero << 1, 0, 0, 0,  
+					0, 1, 0, 0,  
+					0, 0, 1, 0,  
+					0, 0, 0, 1;
+
+			//Eigen::Matrix4f local = CalTransport(before,after);
+			Eigen::Matrix4f local = zero;
+			Eigen::Matrix4f local_c = local.inverse();
+
+			bool flag = false;
+			double max_X,max_Y,max_Z,min_X,min_Y,min_Z;
+			for(int i = 0;i < cloud->size();i++)
+			{
+				pcl::PointXYZRGB pp = cloud->at(i);
+				Eigen::Vector4f v;
+				v[0] = pp.x ;
+				v[1] = pp.y;
+				v[2] = pp.z;
+				v[3] = 1;
+				Eigen::Vector4f t = local_c * v;
+				if(!flag)
+				{
+					max_X = t[0];
+					max_Y = t[1];
+					max_Z = t[2];
+					min_X = t[0];
+					min_Y = t[1];
+					min_Z = t[2];
+					flag = true;
+				}else{
+					if(t[0] > max_X) max_X = t[0];
+					if(t[1] > max_Y) max_Y = t[1];
+					if(t[2] > max_Z) max_Z = t[2];
+					if(t[0] < min_X) min_X = t[0];
+					if(t[1] < min_Y) min_Y = t[1];
+					if(t[2] < min_Z) min_Z = t[2];
+				}
+			}
+		
+		
+			//cout<<max_X-min_X<<","<<max_Y-min_Y<<","<<max_Z-min_Z<<endl;
+			double dx = (max_X - min_X);
+			double dy = (max_Y - min_Y);
+			double dz = (max_Z - min_Z);
+			cout<<"size:"<<dx<<","<<dy<<","<<dz<<endl;
+
+			changeLocal(local, max_X, max_Y, max_Z, min_X, min_Y, min_Z);
+		}
+
 		Traversal(cloud, normals, tran, nHalfXres, nHalfYres, fCoeffX, fCoeffY);
 	}
 
@@ -255,5 +260,10 @@ namespace Rgbd
 	void TsdfModel::freeData()
 	{
 		int ret = freeSdf();
+	}
+
+	void TsdfModel::getSample(float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen, float* absrate)
+	{
+		sampleSdfData(sdevide, sminX, sminY, sminZ, sXlen, sYlen, sZlen, absrate);
 	}
 }

@@ -30,6 +30,10 @@ namespace Rgbd
 		{
 		}
 
+		void SingleTsdfModel::getSample(float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen, float* absrate)
+		{
+		}
+
 		void SingleTsdfModel::freeData()
 		{
 		}

@@ -41,6 +41,8 @@ namespace Rgbd
 		Bound bound;
 		//double bound[6]; //minx, miny, minz, maxx, maxy, maxz
 
+		int belongId; //valid only if it be merged by others;
+
 		//color space feature
 		double ELab[3];
 		double VLab[3];
@@ -121,7 +123,7 @@ namespace Rgbd
 		Segmentation(){}
 		~Segmentation(){}
 
-		int nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags,
+		int nextSegment(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, std::vector<int>& initTags,
 			            std::vector<Block>& blocks, std::vector<Block>& seged_blocks);
 		void calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
 			                  std::vector<int>& tags, int size, std::vector<int>& newTags, 
@@ -129,7 +131,7 @@ namespace Rgbd
 		void calNewCoffandTag(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
 			                  std::vector<int>& tags, int size, std::vector<int>& newTags, 
 							  std::vector<coffCal>& oldCoffs, std::vector<coffCal>& newCoffs);
-		int calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, 
+		int calSegedTags(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& initTags, 
 			             std::vector<int>& tags, std::vector<int>& newTags, std::vector<int>& foundTags,
 			             std::vector<Plane3D>& planes, std::vector<Block>& seged_blocks);
 

@@ -211,6 +211,20 @@ namespace Rgbd
 		char key = 0;  
 		XnStatus result = XN_STATUS_OK;
 
+		XnFieldOfView fov;
+		datas->depthGenerator->GetFieldOfView(fov);
+		XnMapOutputMode outputMode;
+		datas->depthGenerator->GetMapOutputMode(outputMode);
+
+		double fXToZ = tan(fov.fHFOV/2)*2;	
+		double fYToZ = tan(fov.fVFOV/2)*2;
+
+		nHalfXres = outputMode.nXRes / 2;	
+		nHalfYres = outputMode.nYRes / 2;
+
+		fCoeffX = outputMode.nXRes / fXToZ;
+		fCoeffY = outputMode.nYRes / fYToZ;
+
 		while( (key!=27) && !(result = datas->context->WaitAndUpdateAll( ))  && readed_frames < frameCount)
 		{  
 			//get meta data  
@@ -358,11 +372,24 @@ namespace Rgbd
 		sdf->dataFusion(datas->transpointClouds[frameId], datas->transpointNormals[frameId], datas->trans[frameId], nHalfXres, nHalfYres, fCoeffX , fCoeffY, this);
 	}
 
+	void RgbdReader::initaltags(int frameId, std::vector<int>& oldTags, std::vector<int>& newTags, double dthresh)
+	{
+		initalTags(datas->transpointClouds[frameId - 1], datas->transpointClouds[frameId], datas->trans[frameId - 1].inverse(), datas->trans[frameId],  nHalfXres, nHalfYres, fCoeffX, fCoeffY, dthresh, &(oldTags[0]), &(newTags[0]));
+	}
+
 	Eigen::Matrix4f RgbdReader::getExtraSlam(int frameId, double dthresh, int extraTag, vector<int>& oldTags, vector<int>& newTags, Eigen::Matrix4f& extraTr)
 	{
 		Eigen::Matrix4f init = Eigen::Matrix4f::Identity();
 		Eigen::Matrix4f tran = cpuExtraICP(datas->transpointNormals[frameId - 1], datas->transpointClouds[frameId - 1], datas->transpointClouds[frameId], datas->trans[frameId - 1].inverse(), init, nHalfXres, nHalfYres, fCoeffX, fCoeffY,dthresh, extraTag, &(oldTags[0]), &(newTags[0]), extraTr);
 
+		Eigen::Matrix3f rot   = tran.block<3, 3> (0, 0);
+        Eigen::Vector3f trans = tran.block<3, 1> (0, 3);
+		Eigen::Vector3f line;
+		line << 1, 1, 1;
+		Eigen::Vector3f rline = rot* line + trans - line;
+		double dis = sqrt(rline[0] * rline[0] + rline[1] * rline[1] + rline[2] * rline[2]);
+		cout<<dis;
+		if(dis > 0.1) return init; 
 		return tran;
 	}
 
@@ -375,19 +402,6 @@ namespace Rgbd
 			datas->trans.push_back(tran);
 		}
 		else{
-			XnFieldOfView fov;
-			datas->depthGenerator->GetFieldOfView(fov);
-			XnMapOutputMode outputMode;
-			datas->depthGenerator->GetMapOutputMode(outputMode);
-
-			double fXToZ = tan(fov.fHFOV/2)*2;	
-			double fYToZ = tan(fov.fVFOV/2)*2;
-
-			nHalfXres = outputMode.nXRes / 2;	
-			nHalfYres = outputMode.nYRes / 2;
-
-			fCoeffX = outputMode.nXRes / fXToZ;
-			fCoeffY = outputMode.nYRes / fYToZ;
 
 			pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_source(new pcl::PointCloud<pcl::PointXYZRGB>);
 			pcl::PointCloud<pcl::PointXYZRGB>::Ptr keypoints_target(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -415,5 +429,54 @@ namespace Rgbd
 		
 	}
 
-	
+	std::pair<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, pcl::PointCloud<pcl::Normal>::Ptr> RgbdReader::getPointCloud(int frameId)
+	{
+		std::pair<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, pcl::PointCloud<pcl::Normal>::Ptr> ret(datas->transpointClouds[frameId], datas->transpointNormals[frameId]);
+		return ret;
+	}
+
+	std::pair<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, pcl::PointCloud<pcl::Normal>::Ptr> RgbdReader::subPointCloud(Eigen::Matrix4f transform, std::vector<int>& Tags, int blockId, int frameId)
+	{
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+		pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+
+		cloud->height = 480;
+		cloud->width = 640;
+		cloud->is_dense = false;
+
+		cloud->points.resize(cloud->height * cloud->width);
+
+		normals->height = 480;
+		normals->width = 640;
+		normals->is_dense = false;
+
+		normals->points.resize(normals->height * normals->width);
+
+		Eigen::Matrix3f rot   = transform.block<3, 3> (0, 0);
+        Eigen::Vector3f trans = transform.block<3, 1> (0, 3);
+
+		for(int i = 0; i < cloud->size(); i++)
+		{
+			if(Tags[i] == blockId)
+			{
+				cloud->points[i].getVector3fMap () = rot * datas->transpointClouds[frameId]->points[i].getVector3fMap () + trans;
+				cloud->points[i].r = datas->transpointClouds[frameId]->points[i].r;
+				cloud->points[i].g = datas->transpointClouds[frameId]->points[i].g;
+				cloud->points[i].b = datas->transpointClouds[frameId]->points[i].b;
+				normals->points[i].getNormalVector3fMap() = rot * datas->transpointNormals[frameId]->points[i].getNormalVector3fMap();
+			}
+			else
+			{
+                cloud->points[i].x = 0;
+				cloud->points[i].y = 0;
+				cloud->points[i].z = 0;
+				normals->points[i].normal_x = 0xFFFFFFFF;
+				normals->points[i].normal_y = 0xFFFFFFFF;
+				normals->points[i].normal_z = 0xFFFFFFFF;
+
+			}
+		}
+		std::pair<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, pcl::PointCloud<pcl::Normal>::Ptr> ret(cloud, normals);
+		return ret;
+	}
 }

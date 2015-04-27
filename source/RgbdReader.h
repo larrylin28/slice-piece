@@ -77,8 +77,18 @@ namespace Rgbd
 		void putDataToSdf(SdfModel* sdf, int frameId);
 		int getFrameCount();
 		Eigen::Matrix4f getTrans(int frameId);
+		void initaltags(int frameId, std::vector<int>& oldTags, std::vector<int>& newTags, double dthresh);
 		Eigen::Matrix4f getExtraSlam(int frameId, double dthresh, int extraTag, std::vector<int>& oldTags, std::vector<int>& newTags, Eigen::Matrix4f& extraTr);
+		std::pair<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, pcl::PointCloud<pcl::Normal>::Ptr> getPointCloud(int frameId);	
+		std::pair<pcl::PointCloud<pcl::PointXYZRGB>::Ptr, pcl::PointCloud<pcl::Normal>::Ptr> subPointCloud(Eigen::Matrix4f transform, std::vector<int>& Tags, int blockId, int frameId);	
 
+	public:
+		//parameters
+		int nHalfXres;	
+		int nHalfYres;
+
+		double fCoeffX;
+		double fCoeffY;
 
 	private:
 		bool initReading(std::string sFilename);
@@ -86,12 +96,7 @@ namespace Rgbd
 		void doSlam(int frameID, double dthresh);
 
 		DatasPtr datas;
-		//parameters
-		int nHalfXres;	
-		int nHalfYres;
 
-		double fCoeffX;
-		double fCoeffY;
 	};
 }
 #endif 

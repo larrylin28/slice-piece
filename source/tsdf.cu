@@ -326,8 +326,11 @@ __global__ void fusion(float* ptsx, float* ptsy, float* ptsz, float* norx, float
 	ry = mc[1*4+0]*coreX+mc[1*4+1]*coreY+mc[1*4+2]*coreZ + mc[1*4+3]*1;
 	rz = mc[2*4+0]*coreX+mc[2*4+1]*coreY+mc[2*4+2]*coreZ + mc[2*4+3]*1;
 
-	int px = fCoeffX * (rx / 0.001f) / (rz / 0.001f) + nHalfXres;
-    int py = nHalfYres - fCoeffY * (ry / 0.001f) / (rz / 0.001f);
+	float pxf = fCoeffX * (rx / 0.001f) / (rz / 0.001f) + nHalfXres;
+    float pyf = nHalfYres - fCoeffY * (ry / 0.001f) / (rz / 0.001f);
+
+	int px = pxf + 0.5;
+	int py = pyf + 0.5;
 
 	float dist = 100;
 	if(px < 0 || px >= 640 || py < 0 || py >= 480){
@@ -342,8 +345,9 @@ __global__ void fusion(float* ptsx, float* ptsy, float* ptsz, float* norx, float
 			float prz = mc[2*4+0]*ptx+mc[2*4+1]*pty+mc[2*4+2]*ptz + mc[2*4+3]*1;
 
 			float d_p = rz-prz;
+			
 			//求点到平面（近似）距离
-			/*
+			
 			float a[3];
 			float b[3];
 			a[0] = ptsx[py*width+px]-coreX;
@@ -353,7 +357,9 @@ __global__ void fusion(float* ptsx, float* ptsy, float* ptsz, float* norx, float
 			b[1] = nory[py*width+px];
 			b[2] = norz[py*width+px];
 			float d_n = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-			*/
+
+			//float d_s = sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+			
 			//深度：
 			dist = d_p;
 	}
@@ -380,6 +386,40 @@ __global__ void fusion(float* ptsx, float* ptsy, float* ptsz, float* norx, float
 		n_y[id] = ny/n;
 		n_z[id] = nz/n;
 		weights[id] = wid+weight;
+	}
+}
+
+__global__ void sample(float devide, float minX,float minY,float minZ, int Xlen,int Ylen,int Zlen,
+	                          float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen,
+							  float* absrate,float* dists, float* weights, float* n_x,float* n_y, float* n_z, dim3 blockSize)
+{
+	int idx = threadIdx.x*blockSize.x+blockIdx.x;
+	int idy = threadIdx.y*blockSize.y+blockIdx.y;
+	int idz = threadIdx.z*blockSize.z+blockIdx.z;
+
+	if(idx >= sXlen || idy >= sYlen || idz >= sZlen) return;
+
+	int id = ((idz*sYlen)+idy)*sXlen+idx;
+
+	float s_coreX = sminX + ((float)idx + 0.5)*sdevide;
+	float s_coreY = sminY + ((float)idy + 0.5)*sdevide;
+	float s_coreZ = sminZ + ((float)idz + 0.5)*sdevide;
+
+	int downX = (s_coreX-minX) / devide - 0.5;
+	int downY = (s_coreY-minY) / devide - 0.5;
+	int downZ = (s_coreZ-minZ) / devide - 0.5;
+
+	float xd = (s_coreX - (minX + ((float)downX + 0.5)*devide)) / devide;
+	float yd = (s_coreY - (minY + ((float)downY + 0.5)*devide)) / devide;
+	float zd = (s_coreZ - (minZ + ((float)downZ + 0.5)*devide)) / devide;
+
+	float w = getTriInterWeight(weights,Xlen, Ylen, Zlen, downX, downY , downZ,  xd,  yd,  zd);
+	if(w <= 0)
+	{
+		absrate[id] = 1/100;
+	}else{
+		float d = getTriInter(dists,weights,Xlen, Ylen, Zlen, downX, downY , downZ,  xd,  yd,  zd);
+		absrate[id] = 1/abs(d);
 	}
 }
 
@@ -749,3 +789,34 @@ int initialSdf(float minx, float miny, float minz, int xlen,int ylen, int zlen, 
     return cudaStatus;
 }
 
+int sampleSdfData(float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen, float* absrate)
+{
+	int size = sXlen*sYlen*sZlen;
+
+	float *dev_absrate = 0;
+
+	cudaError_t cudaStatus = cudaSuccess;
+	cudaStatus = cudaSetDevice(0);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+        goto Error;
+    }
+
+    cudaStatus = cudaMalloc((void**)&dev_absrate, size * sizeof(float));
+    GO_TO_ERROR(cudaStatus,  "cudaMalloc failed!");
+
+	dim3 dimBlock((sXlen + 7)/8,(sYlen+7)/8, (sZlen+7)/8);
+	dim3 dimThread(8,8,8);
+	sample<<<dimBlock, dimThread>>>(_devide, _minX, _minY, _minZ, _Xlen, _Ylen, _Zlen,
+	                          sdevide, sminX, sminY, sminZ, sXlen, sYlen, sZlen,
+							  dev_absrate, _dists, _weights, _n_x, _n_y, _n_z, dimBlock);
+
+	cudaStatus = cudaMemcpy(absrate, dev_absrate, size * sizeof(float), cudaMemcpyDeviceToHost);
+	GO_TO_ERROR(cudaStatus, "cudaMemcpy failed!")
+
+Error:
+
+	cudaFree(dev_absrate);
+
+	return cudaStatus;
+}

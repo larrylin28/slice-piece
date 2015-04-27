@@ -1,6 +1,7 @@
 ﻿#include "SNPGenerator.h"
 #include "TriangleMesh.h"
 #include "Util.h"
+#include <time.h>
 
 namespace Rgbd
 {
@@ -248,7 +249,15 @@ namespace Rgbd
 		float* p_nx = new float[xl*yl];
 		float* p_ny = new float[xl*yl];
 		float* p_nz = new float[xl*yl];
+		clock_t start, finish, duration;
+
+	    start = clock(); 
 		sdf->rayCast(ix, iy, ax, ay, devide, tran, p_dists, p_nx, p_ny, p_nz);
+		finish = clock(); 
+		duration = (double)(finish - start) * 1000 / CLOCKS_PER_SEC ; 
+		std::cout<<"raycast:"<<duration<<std::endl;
+		start = clock();
+
 		for(int i = 0;i < xl;i++)
 		{
 			for(int j = 0;j < yl;j++)
@@ -293,6 +302,11 @@ namespace Rgbd
 		
 		
 		updateVertexes();
+
+		finish = clock(); 
+		duration = (double)(finish - start) * 1000 / CLOCKS_PER_SEC ; 
+		std::cout<<"build:"<<duration<<std::endl;
+		start = clock();
 	    
 		int m = 1;
 		if(pre)
@@ -425,6 +439,11 @@ namespace Rgbd
 			buildMeshesGreedy(nearest,b,tran,0,except);
 		}
 	    
+		finish = clock(); 
+		duration = (double)(finish - start) * 1000 / CLOCKS_PER_SEC ; 
+		std::cout<<"sew:"<<duration<<std::endl;
+		start = clock();
+
 		return planePoints;
 	}
 

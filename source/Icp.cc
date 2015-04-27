@@ -342,6 +342,7 @@ Eigen::Matrix4f cpuExtraICP(pcl::PointCloud<pcl::Normal>::Ptr old_normals, pcl::
 	
 	float* ata = new float[36];
 	float* atb = new float[6];
+	int count = 0;
 	for(int k = 0; k < iter_max; k++)
 	{
 
@@ -394,6 +395,8 @@ Eigen::Matrix4f cpuExtraICP(pcl::PointCloud<pcl::Normal>::Ptr old_normals, pcl::
 						at[4] = noy;
 						at[5] = noz;
 
+						count++;
+
 						float b = nox*(pox - gptx) + noy*(poy - gpty) + noz*(poz - gptz);
 						for(int i = 0; i < 6; i++)
 						{
@@ -408,6 +411,10 @@ Eigen::Matrix4f cpuExtraICP(pcl::PointCloud<pcl::Normal>::Ptr old_normals, pcl::
 			}
 		}
 
+		if(count < 1000)
+		{
+			return tr;
+		}
 		Eigen::MatrixXf A(6, 6);
 		Eigen::VectorXf b(6);
 		for(int i = 0; i < 6; i++)
@@ -458,4 +465,49 @@ Eigen::Matrix4f cpuExtraICP(pcl::PointCloud<pcl::Normal>::Ptr old_normals, pcl::
 	delete[] trf;
 
 	return tr;
+}
+
+
+void initalTags(pcl::PointCloud<pcl::PointXYZRGB>::Ptr old_cloud, pcl::PointCloud<pcl::PointXYZRGB>::Ptr new_cloud, Eigen::Matrix4f mc, Eigen::Matrix4f tr,int xres,int yres,float coeffx,float coeffy, float dthresh,
+	            int* oldTags, int* newTags)
+{
+	int width = new_cloud->width;
+	int height = new_cloud->height;
+	int size = width * height;
+	
+	for(int idx = 0; idx < width; idx++)
+	{
+		for(int idy = 0; idy < height; idy++)
+		{
+			int newid = idy*width + idx;
+
+			float gptx = new_cloud->at(newid).x;
+			float gpty = new_cloud->at(newid).y;
+			float gptz = new_cloud->at(newid).z;
+
+			//float gptx = tr(0,0)*ptx+tr(0,1)*pty+tr(0,2)*ptz + tr(0,3)*1;
+			//float gpty = tr(1,0)*ptx+tr(1,1)*pty+tr(1,2)*ptz + tr(1,3)*1;
+			//float gptz = tr(2,0)*ptx+tr(2,1)*pty+tr(2,2)*ptz + tr(2,3)*1;
+
+			float rx = mc(0,0)*gptx+mc(0,1)*gpty+mc(0,2)*gptz + mc(0,3)*1;
+			float ry = mc(1,0)*gptx+mc(1,1)*gpty+mc(1,2)*gptz + mc(1,3)*1;
+			float rz = mc(2,0)*gptx+mc(2,1)*gpty+mc(2,2)*gptz + mc(2,3)*1;
+
+			int px = coeffx * (rx / 0.001f) / (rz / 0.001f) + xres;
+			int py = yres - coeffy * (ry / 0.001f) / (rz / 0.001f);
+
+			if(px >= 0 && px < 640 && py >= 0 && py < 480){
+				int oldid = py*width + px;
+				float pox = new_cloud->at(newid).x;
+				float poy = new_cloud->at(newid).y;
+				float poz = new_cloud->at(newid).z;
+
+				float dis = (pox - gptx)*(pox - gptx) + (poy - gpty)*(poy - gpty) + (poz - gptz)*(poz - gptz);
+
+				if(dis < dthresh && oldTags[oldid] >= 0) newTags[newid] = oldTags[oldid];
+			}
+		}
+	}
+
+		
 }

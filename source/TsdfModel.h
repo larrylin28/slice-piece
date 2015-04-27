@@ -11,6 +11,8 @@ namespace Rgbd
 	class TsdfModel : public SdfModel
 	{
 	public:
+		//Rotate or not
+		bool doRotate;
 
 		//boundBox
 		double maxX;
@@ -36,7 +38,8 @@ namespace Rgbd
 	public:
         TsdfModel(Eigen::Matrix4f ltran, 
 			      double maxx,double maxy, double maxz,double minx,double miny,double minz,
-				  double dev,double th,double ep);
+				  double dev,double th,double ep,
+				  bool dorotate);
 		~TsdfModel();
 
         void changeLocal(Eigen::Matrix4f ltran, 
@@ -53,6 +56,8 @@ namespace Rgbd
 			                 float* p_dists, float* p_nx, float* p_ny, float* p_nz);
 
 		virtual void freeData();
+
+		virtual void getSample(float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen, float* absrate);
 
 	private:
 

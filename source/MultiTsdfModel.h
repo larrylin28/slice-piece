@@ -5,7 +5,7 @@
 
 namespace Rgbd
 {	
-	
+	class GLMesh;
 
 	class MultiTsdfModel : public SdfModel
 	{
@@ -16,12 +16,18 @@ namespace Rgbd
 		void showNewRegistration(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, int extraTag, int frameId);
 
 		void showSegmentation(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags, std::vector<Block>& blocks, int tagcount);
+        
+		void showFinalSegment(RgbdReader* reader);
+
+		void classifyUntaged(PointCloud::Ptr cloud, PointNormal::Ptr normals, std::vector<int>& tags);
+
+		void updateTags(RgbdReader* reader);
 
 		int addNewBlock(PointCloud::Ptr cloud, PointNormal::Ptr normals, Block& b, int tag, std::vector<int>& tags);
 
-		void blockCluster(std::vector<int>& blocktags);
+		void blockCluster();
 
-		void buildBlocks(PointCloud::Ptr cloud, PointNormal::Ptr normals, Eigen::Matrix4f tran);
+		void buildBlocks(PointCloud::Ptr cloud, PointNormal::Ptr normals, Eigen::Matrix4f tran, RgbdReader* reader);
 
 		void doNewRegistration(PointCloud::Ptr cloud, PointNormal::Ptr normals, Eigen::Matrix4f tran, RgbdReader* reader);
 
@@ -33,7 +39,18 @@ namespace Rgbd
 			                 Eigen::Matrix4f tran, 
 			                 float* p_dists, float* p_nx, float* p_ny, float* p_nz);
 
+		virtual void getSample(float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen, float* absrate);
+
 		virtual void freeData();
+
+		int getbelongID(int blockID);
+
+		inline int blockCount()
+		{
+			return seged_blocks.size();
+		}
+
+		void MeshGenForBlock(int blockID, RgbdReader* reader, GLMesh* mesh, double devide, double sample_div);
 
 	private:
 		Segmentation seg;

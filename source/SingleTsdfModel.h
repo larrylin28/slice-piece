@@ -26,6 +26,8 @@ namespace Rgbd
 			                 Eigen::Matrix4f tran, 
 			                 float* p_dists, float* p_nx, float* p_ny, float* p_nz);
 
+		virtual void getSample(float sdevide, float sminX, float sminY, float sminZ, int sXlen, int sYlen, int sZlen, float* absrate);
+
 		virtual void freeData();
 
 	};
